@@ -62,7 +62,10 @@ public record MatchPlayerDto(
     bool Abandoned,
     int? Kills,
     int? Deaths,
-    int? Assists);
+    int? Assists,
+    int? PickOrder,
+    bool IsCaptain,
+    bool IsPicked);
 
 public record MatchDetailDto(
     Guid Id,
@@ -81,7 +84,13 @@ public record MatchDetailDto(
     string? LobbyPassword,
     string? BotSteamName,
     DateTime? AbandonsAt,
+    Guid? RadiantCaptainUserId,
+    Guid? DireCaptainUserId,
+    Guid? CurrentPickerUserId,    // captain whose turn it is, or null if drafting is done
+    string? CurrentPickerTeam,    // "Radiant" / "Dire" / null
     IReadOnlyList<MatchPlayerDto> Players);
+
+public record PickPlayerRequest(Guid UserId);
 
 public record MmrHistoryPointDto(
     Guid MatchId,

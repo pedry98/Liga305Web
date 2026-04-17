@@ -1,7 +1,6 @@
 using Liga305.Api.Auth;
 using Liga305.Api.Contracts;
 using Liga305.Domain.Entities;
-using Liga305.Infrastructure.BotWorker;
 using Liga305.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +13,10 @@ namespace Liga305.Api.Controllers;
 public class QueueController(
     Liga305DbContext db,
     CurrentUserAccessor currentUser,
-    IServiceScopeFactory scopeFactory,
     ILogger<QueueController> logger) : ControllerBase
 {
     private const int QueueCapacity = 10;
+    private static readonly Random Rng = new();
 
     [HttpGet]
     public async Task<IActionResult> Get()
@@ -110,119 +109,82 @@ public class QueueController(
         return await Get();
     }
 
+    /// <summary>
+    /// When 10 players are queued, form a Drafting match: pick two captains randomly
+    /// from the top half by MMR (so the highest-rated players run the draft), and
+    /// leave the other 8 unpicked. The captains then alternate picks via the Pick
+    /// endpoint on MatchesController. The bot worker is NOT contacted yet — that
+    /// happens once all 8 picks are in.
+    /// </summary>
     private async Task TryFormMatchAsync(Guid seasonId)
     {
-        Guid? newMatchId = null;
-        List<BotPlayerSpec>? lobbyPlayers = null;
+        await using var tx = await db.Database.BeginTransactionAsync();
 
-        using (var tx = await db.Database.BeginTransactionAsync())
+        var oldest = await db.QueueEntries
+            .Where(q => q.SeasonId == seasonId && q.Status == QueueStatus.Queued)
+            .OrderBy(q => q.EnqueuedAt)
+            .Take(QueueCapacity)
+            .ToListAsync();
+
+        if (oldest.Count < QueueCapacity)
         {
-            var oldest = await db.QueueEntries
-                .Where(q => q.SeasonId == seasonId && q.Status == QueueStatus.Queued)
-                .OrderBy(q => q.EnqueuedAt)
-                .Take(QueueCapacity)
-                .ToListAsync();
-
-            if (oldest.Count < QueueCapacity)
-            {
-                await tx.CommitAsync();
-                return;
-            }
-
-            var userIds = oldest.Select(q => q.UserId).ToList();
-            var mmrs = await db.SeasonPlayers
-                .Where(sp => sp.SeasonId == seasonId && userIds.Contains(sp.UserId))
-                .ToDictionaryAsync(sp => sp.UserId);
-
-            var users = await db.Users
-                .Where(u => userIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id);
-
-            // Snake-draft pairing by MMR desc for balanced sides.
-            var ordered = oldest
-                .Select(q => new { Entry = q, Mmr = mmrs[q.UserId].Mmr, Rd = mmrs[q.UserId].Rd })
-                .OrderByDescending(x => x.Mmr)
-                .ToList();
-
-            var teamOrder = new[] { Team.Radiant, Team.Dire, Team.Dire, Team.Radiant, Team.Radiant, Team.Dire, Team.Dire, Team.Radiant, Team.Radiant, Team.Dire };
-
-            var match = new Match
-            {
-                Id = Guid.NewGuid(),
-                SeasonId = seasonId,
-                Status = MatchStatus.Draft,
-                CreatedAt = DateTime.UtcNow
-            };
-            db.Matches.Add(match);
-
-            var specs = new List<BotPlayerSpec>();
-            for (int i = 0; i < QueueCapacity; i++)
-            {
-                var p = ordered[i];
-                var team = teamOrder[i];
-                db.MatchPlayers.Add(new MatchPlayer
-                {
-                    MatchId = match.Id,
-                    UserId = p.Entry.UserId,
-                    Team = team,
-                    MmrBefore = p.Mmr,
-                    RdBefore = p.Rd,
-                    JoinedLobby = false,
-                    Abandoned = false
-                });
-                p.Entry.Status = QueueStatus.Matched;
-                p.Entry.MatchId = match.Id;
-                specs.Add(new BotPlayerSpec(users[p.Entry.UserId].SteamId64, team.ToString()));
-            }
-
-            await db.SaveChangesAsync();
             await tx.CommitAsync();
-
-            newMatchId = match.Id;
-            lobbyPlayers = specs;
-            logger.LogInformation("Match {MatchId} formed from 10 queue entries in season {SeasonId}", match.Id, seasonId);
+            return;
         }
 
-        // Fire-and-forget the bot call so the requesting user doesn't wait on Steam.
-        if (newMatchId is Guid mid && lobbyPlayers is not null)
-        {
-            _ = Task.Run(() => CreateLobbyForMatchAsync(mid, lobbyPlayers));
-        }
-    }
+        var userIds = oldest.Select(q => q.UserId).ToList();
+        var mmrs = await db.SeasonPlayers
+            .Where(sp => sp.SeasonId == seasonId && userIds.Contains(sp.UserId))
+            .ToDictionaryAsync(sp => sp.UserId);
 
-    private async Task CreateLobbyForMatchAsync(Guid matchId, IReadOnlyList<BotPlayerSpec> players)
-    {
-        try
-        {
-            using var scope = scopeFactory.CreateScope();
-            var bot = scope.ServiceProvider.GetRequiredService<BotWorkerClient>();
-            var scopedDb = scope.ServiceProvider.GetRequiredService<Liga305DbContext>();
-            var scopedLog = scope.ServiceProvider.GetRequiredService<ILogger<QueueController>>();
+        // Top half by MMR is the captain pool. Pick 2 distinct captains from it.
+        var byMmrDesc = oldest
+            .OrderByDescending(q => mmrs[q.UserId].Mmr)
+            .ToList();
+        var captainPool = byMmrDesc.Take(QueueCapacity / 2).ToList(); // top 5
+        var shuffled = captainPool.OrderBy(_ => Rng.Next()).ToList();
+        var capRadiant = shuffled[0];
+        var capDire    = shuffled[1];
 
-            var result = await bot.CreateLobbyAsync(matchId, players);
-            var match = await scopedDb.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
-            if (match is null)
+        var match = new Match
+        {
+            Id = Guid.NewGuid(),
+            SeasonId = seasonId,
+            Status = MatchStatus.Drafting,
+            CreatedAt = DateTime.UtcNow,
+            RadiantCaptainUserId = capRadiant.UserId,
+            DireCaptainUserId    = capDire.UserId
+        };
+        db.Matches.Add(match);
+
+        foreach (var entry in oldest)
+        {
+            var sp = mmrs[entry.UserId];
+            var isRadiantCap = entry.UserId == capRadiant.UserId;
+            var isDireCap    = entry.UserId == capDire.UserId;
+            db.MatchPlayers.Add(new MatchPlayer
             {
-                scopedLog.LogWarning("Match {MatchId} disappeared before lobby creation completed", matchId);
-                return;
-            }
-
-            if (result is null)
-            {
-                scopedLog.LogWarning("Lobby creation returned null for match {MatchId}; leaving Status=Draft", matchId);
-                return;
-            }
-
-            match.LobbyName = result.LobbyName;
-            match.LobbyPassword = result.Password;
-            match.BotSteamName = result.BotSteamName;
-            match.Status = MatchStatus.Lobby;
-            await scopedDb.SaveChangesAsync();
-            scopedLog.LogInformation("Match {MatchId} now in Lobby (simulated={Simulated})", matchId, result.Simulated);
+                MatchId = match.Id,
+                UserId = entry.UserId,
+                // Captains get their team + PickOrder=0 immediately. The other 8
+                // are unpicked: PickOrder=null, Team holds a placeholder (Radiant)
+                // that gets overwritten when their captain picks them.
+                Team = isRadiantCap ? Team.Radiant : isDireCap ? Team.Dire : Team.Radiant,
+                MmrBefore = sp.Mmr,
+                RdBefore = sp.Rd,
+                JoinedLobby = false,
+                Abandoned = false,
+                PickOrder = (isRadiantCap || isDireCap) ? 0 : (int?)null
+            });
+            entry.Status = QueueStatus.Matched;
+            entry.MatchId = match.Id;
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Background lobby creation failed for match {MatchId}", matchId);
-        }
+
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        logger.LogInformation(
+            "Match {MatchId} entered Drafting in season {SeasonId} (captains: Radiant={CapR} Dire={CapD})",
+            match.Id, seasonId, capRadiant.UserId, capDire.UserId);
     }
 }

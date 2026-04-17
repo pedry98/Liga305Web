@@ -119,6 +119,44 @@
       </div>
     }
 
+    @if (m.status === 'Drafting') {
+      <div class="draft-banner" [class.my-turn]="isMyTurn()">
+        @if (isMyTurn()) {
+          <span class="draft-eyebrow">Your pick</span>
+          <span class="draft-msg">Choose a player from the pool below.</span>
+        } @else {
+          <span class="draft-eyebrow">Captain draft in progress</span>
+          <span class="draft-msg">
+            Waiting for <strong>{{ currentPickerName() }}</strong>
+            ({{ m.currentPickerTeam }}) to pick…
+          </span>
+        }
+      </div>
+
+      <div class="pool-card">
+        <header class="pool-head">
+          <h2>Available pool</h2>
+          <span class="muted">{{ pool().length }} unpicked</span>
+        </header>
+        <ul class="pool-list">
+          @for (p of pool(); track p.userId) {
+            <li class="pool-player" [class.clickable]="isMyTurn()" (click)="pickPlayer(p)">
+              @if (p.avatarUrl) {
+                <img [src]="p.avatarUrl" alt="" class="avatar" />
+              } @else {
+                <span class="avatar avatar-placeholder">{{ p.displayName.charAt(0) }}</span>
+              }
+              <span class="pool-name">{{ p.displayName }}</span>
+              <span class="pool-mmr">{{ p.mmrBefore }}</span>
+              @if (isMyTurn()) {
+                <button type="button" class="pick-btn" [disabled]="pickBusy()">Pick</button>
+              }
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
     <div class="teams-grid">
       <div class="team-card radiant" [class.winner]="teamWon('Radiant', m.radiantWin)">
         <header class="team-head">
@@ -137,6 +175,7 @@
               <div class="player-info">
                 <div class="player-name">
                   {{ p.displayName }}
+                  @if (p.isCaptain) { <span class="tag captain-tag" title="Captain">C</span> }
                   @if (p.abandoned) { <span class="tag abandon-tag">Abandoned</span> }
                 </div>
                 <div class="player-mmr">
@@ -182,6 +221,7 @@
               <div class="player-info">
                 <div class="player-name">
                   {{ p.displayName }}
+                  @if (p.isCaptain) { <span class="tag captain-tag" title="Captain">C</span> }
                   @if (p.abandoned) { <span class="tag abandon-tag">Abandoned</span> }
                 </div>
                 <div class="player-mmr">

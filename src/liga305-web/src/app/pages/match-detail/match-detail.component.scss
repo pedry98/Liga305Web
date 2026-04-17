@@ -480,5 +480,132 @@
   color: #d9807e;
 }
 
+.captain-tag {
+  background: rgba(241, 196, 15, 0.18);
+  color: #f1c40f;
+  border: 1px solid rgba(241, 196, 15, 0.5);
+}
+
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.4rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.5rem;
+  background: rgba(102, 192, 244, 0.06);
+  border: 1px solid rgba(102, 192, 244, 0.3);
+
+  .draft-eyebrow {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #66c0f4;
+    padding: 0.25rem 0.65rem;
+    background: rgba(102, 192, 244, 0.12);
+    border-radius: 999px;
+  }
+
+  .draft-msg { color: #c7d5e0; }
+
+  &.my-turn {
+    background: rgba(241, 196, 15, 0.08);
+    border-color: rgba(241, 196, 15, 0.45);
+    box-shadow: 0 0 30px rgba(241, 196, 15, 0.12);
+    animation: pulse-glow 2s ease-in-out infinite;
+
+    .draft-eyebrow {
+      background: rgba(241, 196, 15, 0.18);
+      color: #f1c40f;
+    }
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 30px rgba(241, 196, 15, 0.12); }
+  50%      { box-shadow: 0 0 60px rgba(241, 196, 15, 0.28); }
+}
+
+.pool-card {
+  background: #1b2838;
+  border: 1px solid #2d3a4a;
+  border-radius: 0.6rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 2rem;
+
+  .pool-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+
+    h2 { margin: 0; font-size: 1.1rem; }
+    .muted { color: #8a98a5; font-size: 0.85rem; }
+  }
+}
+
+.pool-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.5rem;
+}
+
+.pool-player {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #2d3a4a;
+  border-radius: 0.4rem;
+  transition: border-color 0.15s, background 0.15s;
+
+  .avatar { width: 30px; height: 30px; border-radius: 4px; }
+
+  .pool-name {
+    flex: 1;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pool-mmr {
+    color: #66c0f4;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .pick-btn {
+    background: #f1c40f;
+    color: #0e1a26;
+    border: 0;
+    padding: 0.3rem 0.7rem;
+    border-radius: 0.3rem;
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+
+    &:hover:not(:disabled) { filter: brightness(1.1); }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+
+  &.clickable {
+    cursor: pointer;
+    &:hover {
+      border-color: #f1c40f;
+      background: rgba(241, 196, 15, 0.04);
+    }
+  }
+}
+
 .center { text-align: center; }
 .muted  { color: #8a98a5; }

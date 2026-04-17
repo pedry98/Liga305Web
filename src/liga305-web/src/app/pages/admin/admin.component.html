@@ -20,9 +20,14 @@
         <h1>Admin console</h1>
         <p class="muted">Manage seasons, users, and live matches</p>
       </div>
-      @if (preview() && !u?.isAdmin) {
-        <span class="preview-tag">Preview mode · not a real admin</span>
-      }
+      <div class="header-actions">
+        @if (preview() && !u?.isAdmin) {
+          <span class="preview-tag">Preview mode · not a real admin</span>
+        }
+        @if (u?.isAdmin) {
+          <button type="button" class="btn btn-danger" (click)="resetLeague()">Reset league</button>
+        }
+      </div>
     </header>
 
     <nav class="tabs">

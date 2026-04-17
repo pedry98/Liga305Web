@@ -1,4 +1,4 @@
-export type MatchStatus = 'Draft' | 'Lobby' | 'Live' | 'Completed' | 'Abandoned';
+export type MatchStatus = 'Drafting' | 'Draft' | 'Lobby' | 'Live' | 'Completed' | 'Abandoned';
 export type Team = 'Radiant' | 'Dire';
 
 export interface MatchPlayer {
@@ -14,6 +14,9 @@ export interface MatchPlayer {
   kills: number | null;
   deaths: number | null;
   assists: number | null;
+  pickOrder: number | null;   // 0 = captain, 1+ = pick number, null = unpicked
+  isCaptain: boolean;
+  isPicked: boolean;
 }
 
 export interface MatchSummary {
@@ -36,6 +39,10 @@ export interface MatchDetail extends MatchSummary {
   lobbyPassword: string | null;
   botSteamName: string | null;
   abandonsAt: string | null;
+  radiantCaptainUserId: string | null;
+  direCaptainUserId: string | null;
+  currentPickerUserId: string | null;   // null when drafting is done
+  currentPickerTeam: Team | null;
   players: MatchPlayer[];
 }
 

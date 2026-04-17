@@ -3,14 +3,38 @@
 @let q = queueState();
 
 <section class="hero">
-  <h1>Liga305</h1>
-  <p class="tagline">A private FACEIT-style league for Dota 2.</p>
+  <img src="logo.png" alt="Liga305" class="hero-logo" />
+  <span class="hero-eyebrow">DOTA 2 · CUBA · CAPTAIN'S MODE</span>
+  <h1 class="hero-title">LIGA<span class="hero-accent">305</span></h1>
+  <p class="hero-tagline">Queue. Draft. Fight. Climb.</p>
 
   @if (u) {
     <p class="welcome">Welcome back, <strong>{{ u.displayName }}</strong>.</p>
+    <a routerLink="/queue" class="btn-cta">Enter the queue</a>
   } @else {
-    <a [href]="steamLoginUrl" class="btn-steam">Sign in with Steam</a>
+    <a [href]="steamLoginUrl" class="btn-cta btn-steam">Sign in with Steam</a>
   }
+</section>
+
+<section class="manifesto">
+  <h2 class="manifesto-title">Cuba's home for competitive Dota 2.</h2>
+  <p>
+    Liga305 exists for Cuban players who want their matches to mean something.
+    Sign in with your Steam account, hit the queue, and once ten of us are in
+    the bot picks two captains and the draft begins. Snake-pick your team,
+    play the game, and your <strong>MMR moves up or down</strong> based on the
+    quality of opponents — not just the result.
+  </p>
+  <p>
+    Every match is recorded: <strong>kills, deaths, assists, win-rate</strong>,
+    season-long MMR history per player. Track your form, see who's actually
+    carrying, settle arguments with stats. Seasons reset the standings; the
+    grind is real, but the numbers are public.
+  </p>
+  <p class="manifesto-foot">
+    No randoms. No smurf farms. Just a tight Discord-group league with the
+    structure of FACEIT — built by us, for us.
+  </p>
 </section>
 
 @if (s) {

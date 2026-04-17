@@ -3,6 +3,7 @@ using System;
 using Liga305.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Liga305.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(Liga305DbContext))]
-    partial class Liga305DbContextModelSnapshot : ModelSnapshot
+    [Migration("20260417233714_CaptainPickAndElo")]
+    partial class CaptainPickAndElo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

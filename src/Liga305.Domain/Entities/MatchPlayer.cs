@@ -25,6 +25,10 @@ public class MatchPlayer
     public int? Deaths { get; set; }
     public int? Assists { get; set; }
 
+    // Captain-pick draft order: 0 = captain, 1 = first pick, 2 = second pick, ...
+    // Null while drafting is still in progress for this slot.
+    public int? PickOrder { get; set; }
+
     public Match Match { get; set; } = null!;
     public User User { get; set; } = null!;
 }

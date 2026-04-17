@@ -32,10 +32,12 @@ export class MatchDetailComponent {
   readonly pasteBusy = signal(false);
   readonly nowMs = signal(Date.now());
 
+  readonly pickBusy = signal(false);
+
   readonly countdown = computed<string | null>(() => {
     const m = this.match();
     if (!m?.abandonsAt) return null;
-    if (m.status !== 'Draft' && m.status !== 'Lobby') return null;
+    if (m.status !== 'Drafting' && m.status !== 'Draft' && m.status !== 'Lobby') return null;
     const remainingMs = new Date(m.abandonsAt).getTime() - this.nowMs();
     if (remainingMs <= 0) return '0:00';
     const totalSec = Math.floor(remainingMs / 1000);
@@ -50,8 +52,35 @@ export class MatchDetailComponent {
     return new Date(m.abandonsAt).getTime() - this.nowMs() < 60_000; // last minute
   });
 
-  readonly radiant = computed<MatchPlayer[]>(() => this.match()?.players.filter(p => p.team === 'Radiant') ?? []);
-  readonly dire    = computed<MatchPlayer[]>(() => this.match()?.players.filter(p => p.team === 'Dire')    ?? []);
+  // Drafting view: only show players who are picked/captain on their team. The
+  // "pool" is everyone who hasn't been picked yet (PickOrder === null).
+  readonly radiant = computed<MatchPlayer[]>(() => {
+    const m = this.match();
+    if (!m) return [];
+    if (m.status === 'Drafting') return m.players.filter(p => p.isPicked && p.team === 'Radiant');
+    return m.players.filter(p => p.team === 'Radiant');
+  });
+  readonly dire = computed<MatchPlayer[]>(() => {
+    const m = this.match();
+    if (!m) return [];
+    if (m.status === 'Drafting') return m.players.filter(p => p.isPicked && p.team === 'Dire');
+    return m.players.filter(p => p.team === 'Dire');
+  });
+  readonly pool = computed<MatchPlayer[]>(() =>
+    this.match()?.players.filter(p => !p.isPicked).sort((a, b) => b.mmrBefore - a.mmrBefore) ?? []
+  );
+
+  readonly isMyTurn = computed(() => {
+    const m = this.match();
+    const u = this.user();
+    return !!(m && u && m.status === 'Drafting' && m.currentPickerUserId === u.id);
+  });
+
+  readonly currentPickerName = computed(() => {
+    const m = this.match();
+    if (!m?.currentPickerUserId) return null;
+    return m.players.find(p => p.userId === m.currentPickerUserId)?.displayName ?? null;
+  });
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
@@ -145,6 +174,19 @@ export class MatchDetailComponent {
     } finally {
       this.pasteBusy.set(false);
     }
+  }
+
+  async pickPlayer(player: MatchPlayer) {
+    const m = this.match();
+    if (!m || this.pickBusy()) return;
+    if (!this.isMyTurn()) return;
+    if (player.isPicked) return;
+    this.pickBusy.set(true);
+    this.matches.pickPlayer(m.id, player.userId).subscribe({
+      next: updated => this.match.set(updated),
+      error: e => alert(e?.error?.error ?? 'Pick failed'),
+      complete: () => this.pickBusy.set(false)
+    });
   }
 
   statusClass(s: string): string { return 'status-' + s.toLowerCase(); }

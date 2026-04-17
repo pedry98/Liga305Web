@@ -20,6 +20,80 @@ public class AdminController(
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
+    /// Wipe the league back to a clean slate:
+    ///   * destroys all matches (and the cascading MatchPlayers + MmrHistory rows),
+    ///   * cancels all queue entries,
+    ///   * deletes every "TestBot" user and their season enrollments,
+    ///   * resets every remaining player's active-season MMR to the season default
+    ///     (1000 by request) with zero W/L/abandons.
+    ///
+    /// Requires `?confirm=YES` to avoid accidental fat-finger calls.
+    /// </summary>
+    [HttpPost("reset-league")]
+    public async Task<IActionResult> ResetLeague([FromQuery] string? confirm = null)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+        if (confirm != "YES") return BadRequest(new { error = "missing_confirm", hint = "POST /admin/reset-league?confirm=YES" });
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        // 1. Wipe all matches (cascades into MatchPlayers and MmrHistory via FK).
+        var matchIds = await db.Matches.Select(m => m.Id).ToListAsync();
+        if (matchIds.Count > 0)
+        {
+            await db.MmrHistory.Where(h => matchIds.Contains(h.MatchId)).ExecuteDeleteAsync();
+            await db.MatchPlayers.Where(mp => matchIds.Contains(mp.MatchId)).ExecuteDeleteAsync();
+            await db.QueueEntries.Where(q => q.MatchId != null && matchIds.Contains(q.MatchId.Value)).ExecuteDeleteAsync();
+            await db.Matches.Where(m => matchIds.Contains(m.Id)).ExecuteDeleteAsync();
+        }
+
+        // 2. Cancel any orphan queue entries (e.g. a real user mid-queue).
+        await db.QueueEntries.ExecuteDeleteAsync();
+
+        // 3. Delete TestBot users (their fake SteamIDs start with 1000000000000000)
+        //    and any leftover MmrHistory rows referencing them.
+        var botUserIds = await db.Users
+            .Where(u => u.SteamId64.StartsWith("1000000000000000"))
+            .Select(u => u.Id)
+            .ToListAsync();
+        if (botUserIds.Count > 0)
+        {
+            await db.MmrHistory.Where(h => botUserIds.Contains(h.UserId)).ExecuteDeleteAsync();
+            await db.SeasonPlayers.Where(sp => botUserIds.Contains(sp.UserId)).ExecuteDeleteAsync();
+            await db.Users.Where(u => botUserIds.Contains(u.Id)).ExecuteDeleteAsync();
+        }
+
+        // 4. Reset every remaining season player to the new starting line.
+        const double startingMmr = 1000;
+        const double startingRd = 350;
+        const double startingVol = 0.06;
+        await db.SeasonPlayers.ExecuteUpdateAsync(s => s
+            .SetProperty(sp => sp.Mmr, startingMmr)
+            .SetProperty(sp => sp.Rd, startingRd)
+            .SetProperty(sp => sp.Volatility, startingVol)
+            .SetProperty(sp => sp.Wins, 0)
+            .SetProperty(sp => sp.Losses, 0)
+            .SetProperty(sp => sp.Abandons, 0));
+
+        // 5. Bump the active season's defaults to match (so any new sign-ins start at 1000).
+        await db.Seasons.Where(s => s.IsActive).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.StartingMmr, startingMmr));
+
+        await tx.CommitAsync();
+
+        var realUsersCount = await db.Users.CountAsync();
+        logger.LogWarning("Admin {Admin} reset the league: {Matches} matches deleted, {Bots} bot users removed, {Real} real users reset", me.DisplayName, matchIds.Count, botUserIds.Count, realUsersCount);
+        return Ok(new
+        {
+            matchesDeleted = matchIds.Count,
+            botUsersRemoved = botUserIds.Count,
+            realUsersReset = realUsersCount,
+            startingMmr
+        });
+    }
+
+    /// <summary>
     /// List every registered user with their active-season aggregates so the admin
     /// console can show a real users table.
     /// </summary>

@@ -43,13 +43,26 @@ export class AdminComponent {
   constructor() {
     this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
 
-    // Refresh users whenever the gate opens (real admin or preview-mode toggle).
+    // Refresh users when (a) the gate opens or (b) the user clicks the Users tab.
     effect(() => {
-      if (this.canSee()) this.loadUsers();
+      if (this.canSee() && this.tab() === 'users') this.loadUsers();
     });
   }
 
   setTab(t: Tab) { this.tab.set(t); }
+
+  async resetLeague() {
+    if (!confirm('Reset the league?\n\nThis will:\n• delete every match and its history\n• remove all TestBot accounts\n• reset every real player to 1000 MMR with 0 wins/losses\n\nThere is no undo.')) return;
+    if (!confirm('Are you absolutely sure? Type-in nothing — this is the second confirm.')) return;
+    try {
+      const r = await this.adminSvc.resetLeague();
+      alert(`League reset.\n\n${r.matchesDeleted} matches deleted, ${r.botUsersRemoved} bot users removed, ${r.realUsersReset} real users reset to ${r.startingMmr} MMR.`);
+      this.loadUsers();
+      this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
+    } catch (e: any) {
+      alert(e?.error?.error ?? 'Reset failed');
+    }
+  }
 
   async loadUsers() {
     if (this.usersLoading()) return;

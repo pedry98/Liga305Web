@@ -49,4 +49,12 @@ export class MatchService {
       { withCredentials: true }
     );
   }
+
+  pickPlayer(matchId: string, userId: string): Observable<MatchDetail> {
+    return this.http.post<MatchDetail>(
+      `${this.api}/matches/${matchId}/pick`,
+      { userId },
+      { withCredentials: true }
+    );
+  }
 }

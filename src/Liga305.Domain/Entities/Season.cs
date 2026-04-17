@@ -7,7 +7,7 @@ public class Season
     public DateTime StartsAt { get; set; }
     public DateTime EndsAt { get; set; }
     public bool IsActive { get; set; }
-    public double StartingMmr { get; set; } = 1500;
+    public double StartingMmr { get; set; } = 1000;
     public double StartingRd { get; set; } = 350;
     public double StartingVolatility { get; set; } = 0.06;
     public DateTime CreatedAt { get; set; }

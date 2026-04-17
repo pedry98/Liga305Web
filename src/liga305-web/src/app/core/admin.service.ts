@@ -48,6 +48,16 @@ export class AdminService {
     );
   }
 
+  resetLeague(): Promise<{ matchesDeleted: number; botUsersRemoved: number; realUsersReset: number; startingMmr: number }> {
+    return firstValueFrom(
+      this.http.post<{ matchesDeleted: number; botUsersRemoved: number; realUsersReset: number; startingMmr: number }>(
+        `${this.api}/admin/reset-league?confirm=YES`,
+        null,
+        { withCredentials: true }
+      )
+    );
+  }
+
   fillQueueWithBots(targetSize = 9): Promise<{ added: number; queueSize: number }> {
     return firstValueFrom(
       this.http.post<{ added: number; queueSize: number }>(
