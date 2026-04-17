@@ -21,10 +21,7 @@ RUN dotnet publish src/Liga305.Api/Liga305.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# Non-root user for the API process.
-RUN addgroup --system --gid 1000 app && \
-    adduser  --system --uid 1000 --ingroup app app
-
+# .NET 9 base image already ships a non-root `app` user (UID/GID 1654) — use it.
 COPY --from=build --chown=app:app /app ./
 # wwwroot/avatars is a mounted volume in prod (persistent uploads).
 RUN mkdir -p wwwroot/avatars && chown -R app:app wwwroot
