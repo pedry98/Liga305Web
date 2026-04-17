@@ -8,19 +8,7 @@
 
 {$API_DOMAIN} {
     encode zstd gzip
-
-    # Steam OpenID callback needs to land on the API, not the SPA.
-    # It's a default path from the AspNet.Security.OpenId package.
-    @callbacks path /signin-steam /auth/*
-    handle @callbacks {
-        reverse_proxy api:8080
-    }
-
-    # User-uploaded avatars served by the API's static file middleware.
-    handle_path /avatars/* {
-        reverse_proxy api:8080
-    }
-
-    # Everything else on the API origin is our own endpoints.
+    # API handles its own routing — Steam OpenID callback (/signin-steam),
+    # /auth/*, /avatars/* (uploaded files), and all controllers.
     reverse_proxy api:8080
 }
