@@ -5,8 +5,9 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json package-lock.json ./
+# Fall back to `npm install` if the lock file drifts from package.json.
+RUN npm ci || (echo ">> npm ci failed, falling back to npm install" && npm install)
 
 COPY . .
 
