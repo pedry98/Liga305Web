@@ -1,0 +1,43 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Node
+node_modules/
+dist/
+.angular/cache/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+appsettings.Development.json
+appsettings.Local.json
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Postgres data volume (docker-compose)
+.data/
+
+# Production deploy env
+deploy/.env
+
+# User-uploaded avatars (only the .gitkeep stays so the dir exists)
+src/Liga305.Api/wwwroot/avatars/*
+!src/Liga305.Api/wwwroot/avatars/.gitkeep

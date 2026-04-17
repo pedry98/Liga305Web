@@ -1,0 +1,44 @@
+@let u = user();
+@let s = season();
+@let q = queueState();
+
+<section class="hero">
+  <h1>Liga305</h1>
+  <p class="tagline">A private FACEIT-style league for Dota 2.</p>
+
+  @if (u) {
+    <p class="welcome">Welcome back, <strong>{{ u.displayName }}</strong>.</p>
+  } @else {
+    <a [href]="steamLoginUrl" class="btn-steam">Sign in with Steam</a>
+  }
+</section>
+
+@if (s) {
+  <section class="cards">
+    <a routerLink="/leaderboard" class="card">
+      <span class="card-eyebrow">Active Season</span>
+      <h2>{{ s.name }}</h2>
+      <p class="card-stat">
+        <span class="stat-num">{{ s.playerCount }}</span> players
+        ·
+        <span class="stat-num">{{ s.matchCount }}</span> matches
+      </p>
+      <p class="card-cta">View leaderboard →</p>
+    </a>
+
+    <a routerLink="/queue" class="card">
+      <span class="card-eyebrow">Queue</span>
+      <h2>{{ q.size }} <span class="muted">/ {{ q.capacity }}</span></h2>
+      <div class="progress">
+        <div class="progress-bar" [style.width.%]="queueProgress()"></div>
+      </div>
+      <p class="card-cta">
+        @if (q.selfInQueue) {
+          You're in queue →
+        } @else {
+          Join the queue →
+        }
+      </p>
+    </a>
+  </section>
+}

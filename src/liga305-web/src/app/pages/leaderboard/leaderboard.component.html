@@ -1,0 +1,74 @@
+@let s = season();
+
+<section class="leaderboard">
+  <header class="page-header">
+    <div>
+      <h1>Leaderboard</h1>
+      @if (s) {
+        <p class="muted">
+          {{ s.name }} · {{ s.playerCount }} players · {{ s.matchCount }} matches played
+        </p>
+      }
+    </div>
+    @if (s) {
+      <span class="badge badge-active">Active Season</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="card empty">Loading…</div>
+  } @else {
+    <div class="podium">
+      @for (e of topThree(); track e.userId) {
+        <article class="podium-card" [class]="rankClass(e.rank)">
+          <div class="podium-rank">#{{ e.rank }}</div>
+          <div class="podium-name">{{ e.displayName }}</div>
+          <div class="podium-mmr">{{ e.mmr }} <span class="muted">MMR</span></div>
+          <div class="podium-record">
+            <span class="win">{{ e.wins }}W</span> –
+            <span class="loss">{{ e.losses }}L</span>
+            <span class="muted">({{ winrate(e) }}%)</span>
+          </div>
+        </article>
+      }
+    </div>
+
+    <div class="card">
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th class="rank">#</th>
+            <th>Player</th>
+            <th class="num">MMR</th>
+            <th class="num">W</th>
+            <th class="num">L</th>
+            <th class="num">Win %</th>
+            <th class="num">Abandons</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (e of rest(); track e.userId) {
+            <tr>
+              <td class="rank">{{ e.rank }}</td>
+              <td>
+                <div class="player">
+                  @if (e.avatarUrl) {
+                    <img [src]="e.avatarUrl" alt="" class="avatar-sm" />
+                  } @else {
+                    <span class="avatar-sm avatar-placeholder">{{ e.displayName.charAt(0) }}</span>
+                  }
+                  <span>{{ e.displayName }}</span>
+                </div>
+              </td>
+              <td class="num mmr">{{ e.mmr }}</td>
+              <td class="num win">{{ e.wins }}</td>
+              <td class="num loss">{{ e.losses }}</td>
+              <td class="num">{{ winrate(e) }}%</td>
+              <td class="num">{{ e.abandons }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

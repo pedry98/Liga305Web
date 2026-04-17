@@ -1,0 +1,53 @@
+<section class="matches-page">
+  <header class="page-header">
+    <h1>Matches</h1>
+    <p class="muted">All matches in the active season</p>
+  </header>
+
+  @if (loading()) {
+    <div class="card empty">Loading…</div>
+  } @else if (rows().length === 0) {
+    <div class="card empty">No matches yet.</div>
+  } @else {
+    <ul class="match-list">
+      @for (m of rows(); track m.id) {
+        <li>
+          <a [routerLink]="['/matches', m.id]" class="match-row">
+            <span class="status-badge" [class]="statusClass(m.status)">{{ m.status }}</span>
+
+            <div class="teams">
+              <div class="team radiant">
+                <span class="team-label">Radiant</span>
+                <span class="team-mmr">{{ m.radiantAvgMmr }} <span class="muted">avg</span></span>
+              </div>
+              <span class="vs">vs</span>
+              <div class="team dire">
+                <span class="team-label">Dire</span>
+                <span class="team-mmr">{{ m.direAvgMmr }} <span class="muted">avg</span></span>
+              </div>
+            </div>
+
+            <div class="meta">
+              @if (m.status === 'Completed' && m.radiantWin !== null) {
+                <span class="winner" [class.radiant-win]="m.radiantWin" [class.dire-win]="!m.radiantWin">
+                  {{ winnerLabel(m) }}
+                </span>
+                <span class="muted">· {{ durationText(m.durationSec) }}</span>
+              } @else if (m.status === 'Live') {
+                <span class="live-dot"></span>
+                <span class="live-label">Live now</span>
+              } @else if (m.status === 'Lobby') {
+                <span class="muted">Waiting in lobby</span>
+              } @else if (m.status === 'Draft') {
+                <span class="muted">Creating lobby…</span>
+              } @else if (m.status === 'Abandoned') {
+                <span class="muted">Abandoned</span>
+              }
+              <span class="time">{{ timeAgo(m.createdAt) }}</span>
+            </div>
+          </a>
+        </li>
+      }
+    </ul>
+  }
+</section>

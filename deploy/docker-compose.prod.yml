@@ -1,0 +1,70 @@
+# Production compose for Liga305Web on a single VPS.
+#
+# Usage:
+#   cp deploy/.env.production.example deploy/.env
+#   # edit deploy/.env with your domain, Neon connection string, Steam creds
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml up -d --build
+
+name: liga305
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+    depends_on: [web, api]
+
+  api:
+    build:
+      context: ..
+      dockerfile: src/Liga305.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Postgres: ${POSTGRES_CONN}
+      Steam__WebApiKey: ${STEAM_WEB_API_KEY}
+      Frontend__BaseUrl: https://${SITE_DOMAIN}
+      Cors__AllowedOrigins__0: https://${SITE_DOMAIN}
+      BotWorker__BaseUrl: http://bot-worker:4100
+      BotWorker__SharedSecret: ${WORKER_SHARED_SECRET}
+    volumes:
+      - avatars:/app/wwwroot/avatars
+    depends_on: [bot-worker]
+
+  web:
+    build:
+      context: ../src/liga305-web
+      args:
+        # Angular SPA needs to know where to send API calls. This must match
+        # the API_DOMAIN served by Caddy.
+        API_BASE_URL: https://${API_DOMAIN}
+    restart: unless-stopped
+
+  bot-worker:
+    build:
+      context: ../src/bot-worker
+    restart: unless-stopped
+    environment:
+      PORT: "4100"
+      WORKER_SHARED_SECRET: ${WORKER_SHARED_SECRET}
+      API_BASE_URL: http://api:8080
+      BOT_STEAM_USERNAME: ${BOT_STEAM_USERNAME}
+      BOT_STEAM_PASSWORD: ${BOT_STEAM_PASSWORD}
+      BOT_STEAM_SHARED_SECRET: ${BOT_STEAM_SHARED_SECRET}
+      DOTA_SERVER_REGION: ${DOTA_SERVER_REGION:-2}
+      DOTA_GAME_MODE: ${DOTA_GAME_MODE:-2}
+      ABANDON_TIMEOUT_SEC: ${ABANDON_TIMEOUT_SEC:-240}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  avatars:

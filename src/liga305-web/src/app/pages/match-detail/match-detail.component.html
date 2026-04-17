@@ -1,0 +1,214 @@
+@let m = match();
+
+@if (m === undefined) {
+  <div class="page"><p class="muted center">Loading…</p></div>
+} @else if (m === null) {
+  <div class="page">
+    <p class="muted center">Match not found.</p>
+    <p class="center"><a routerLink="/matches">← Back to matches</a></p>
+  </div>
+} @else {
+  <section class="match-page">
+    <a routerLink="/matches" class="back-link">← All matches</a>
+
+    <header class="match-header">
+      <div>
+        <span class="status-badge" [class]="statusClass(m.status)">{{ m.status }}</span>
+        <h1>Match #{{ m.id.replace('match-', '') }}</h1>
+        <p class="muted">{{ m.seasonName }}</p>
+      </div>
+      <div class="header-meta">
+        @if (m.dotaMatchId) {
+          <div class="dota-id">
+            <span class="muted">Dota match ID</span>
+            <span class="mono">{{ m.dotaMatchId }}</span>
+          </div>
+        }
+        @if (m.durationSec !== null) {
+          <div><span class="muted">Duration</span> <span>{{ durationText(m.durationSec) }}</span></div>
+        }
+      </div>
+    </header>
+
+    @if (countdown(); as cd) {
+      <div class="countdown-bar" [class.low]="countdownLow()">
+        <span class="countdown-label">Lobby auto-cancels in</span>
+        <span class="countdown-value">{{ cd }}</span>
+      </div>
+    }
+
+    @if (m.status === 'Lobby' || m.status === 'Live') {
+      <div class="lobby-card">
+        <div class="lobby-info">
+          <div>
+            <div class="lobby-label">Lobby name</div>
+            <div class="lobby-value">
+              <span class="mono">{{ m.lobbyName }}</span>
+              <button type="button" class="btn-copy" (click)="copy(m.lobbyName, 'Name')">Copy</button>
+            </div>
+          </div>
+          @if (m.lobbyPassword) {
+            <div>
+              <div class="lobby-label">Password</div>
+              <div class="lobby-value">
+                <span class="mono">{{ m.lobbyPassword }}</span>
+                <button type="button" class="btn-copy" (click)="copy(m.lobbyPassword, 'Password')">Copy</button>
+              </div>
+            </div>
+          }
+          <div>
+            <div class="lobby-label">Bot host</div>
+            <div class="lobby-value">
+              <span>{{ m.botSteamName }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="lobby-buttons">
+          <button type="button" class="btn-secondary" [disabled]="resendBusy()" (click)="resendInvite()">
+            {{ resendBusy() ? 'Sending…' : 'Resend invite' }}
+          </button>
+          <a href="steam://run/570" class="btn-dota">Open Dota 2</a>
+        </div>
+        @if (copyHint(); as hint) {
+          <span class="copy-hint">{{ hint }}</span>
+        }
+        @if (resendMessage(); as msg) {
+          <span class="copy-hint resend-hint">{{ msg }}</span>
+        }
+      </div>
+    } @else if (m.status === 'Draft') {
+      <div class="lobby-card muted-card">
+        <p>Bot is creating the lobby…</p>
+      </div>
+    } @else if (m.status === 'Completed') {
+      <div class="result-banner" [class.radiant-win]="m.radiantWin" [class.dire-win]="!m.radiantWin">
+        <span class="result-team">{{ m.radiantWin ? 'Radiant' : 'Dire' }}</span>
+        <span class="result-label">Victory</span>
+      </div>
+    } @else if (m.status === 'Abandoned') {
+      <div class="result-banner abandoned">
+        <span class="result-label">Match abandoned</span>
+        <span class="muted">A player did not join — match voided.</span>
+      </div>
+    }
+
+    @if (user()?.isAdmin && (m.status === 'Lobby' || m.status === 'Live' || m.status === 'Draft')) {
+      <div class="admin-tools">
+        <span class="admin-eyebrow">Admin / dev</span>
+        <div class="admin-actions">
+          <button type="button" class="btn-ghost" [disabled]="settleBusy()" (click)="testSettle(true)">
+            Settle Radiant win (test, skips OpenDota)
+          </button>
+          <button type="button" class="btn-ghost" [disabled]="settleBusy()" (click)="testSettle(false)">
+            Settle Dire win (test)
+          </button>
+        </div>
+        @if (m.status !== 'Draft' && !m.dotaMatchId) {
+          <div class="paste-row">
+            <input type="text" inputmode="numeric" pattern="[0-9]*"
+                   placeholder="Paste Dota match ID (if bot missed it)"
+                   [ngModel]="pasteMatchId()"
+                   (ngModelChange)="pasteMatchId.set($event)"
+                   [disabled]="pasteBusy()" />
+            <button type="button" class="btn-ghost" [disabled]="pasteBusy() || !pasteMatchId()"
+                    (click)="submitDotaMatchId()">
+              {{ pasteBusy() ? 'Setting…' : 'Set match ID' }}
+            </button>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="teams-grid">
+      <div class="team-card radiant" [class.winner]="teamWon('Radiant', m.radiantWin)">
+        <header class="team-head">
+          <h2>Radiant</h2>
+          <span class="team-avg">{{ m.radiantAvgMmr }} avg MMR</span>
+          @if (teamWon('Radiant', m.radiantWin)) { <span class="crown">Victory</span> }
+        </header>
+        <ul class="player-list">
+          @for (p of radiant(); track p.userId) {
+            <li class="player" [class.abandoned]="p.abandoned">
+              @if (p.avatarUrl) {
+                <img [src]="p.avatarUrl" alt="" class="avatar" />
+              } @else {
+                <span class="avatar avatar-placeholder">{{ p.displayName.charAt(0) }}</span>
+              }
+              <div class="player-info">
+                <div class="player-name">
+                  {{ p.displayName }}
+                  @if (p.abandoned) { <span class="tag abandon-tag">Abandoned</span> }
+                </div>
+                <div class="player-mmr">
+                  <span class="mmr-before">{{ p.mmrBefore }}</span>
+                  @if (p.mmrAfter !== null) {
+                    @let d = mmrDelta(p);
+                    <span class="arrow">→</span>
+                    <span class="mmr-after">{{ p.mmrAfter }}</span>
+                    <span class="delta" [class.up]="d && d > 0" [class.down]="d && d < 0">
+                      {{ d && d > 0 ? '+' : '' }}{{ d }}
+                    </span>
+                  }
+                </div>
+              </div>
+              @if (p.kills !== null) {
+                <div class="player-kda" title="Kills / Deaths / Assists">
+                  <span class="kda-k">{{ p.kills }}</span>
+                  <span class="kda-sep">/</span>
+                  <span class="kda-d">{{ p.deaths }}</span>
+                  <span class="kda-sep">/</span>
+                  <span class="kda-a">{{ p.assists }}</span>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      </div>
+
+      <div class="team-card dire" [class.winner]="teamWon('Dire', m.radiantWin)">
+        <header class="team-head">
+          <h2>Dire</h2>
+          <span class="team-avg">{{ m.direAvgMmr }} avg MMR</span>
+          @if (teamWon('Dire', m.radiantWin)) { <span class="crown">Victory</span> }
+        </header>
+        <ul class="player-list">
+          @for (p of dire(); track p.userId) {
+            <li class="player" [class.abandoned]="p.abandoned">
+              @if (p.avatarUrl) {
+                <img [src]="p.avatarUrl" alt="" class="avatar" />
+              } @else {
+                <span class="avatar avatar-placeholder">{{ p.displayName.charAt(0) }}</span>
+              }
+              <div class="player-info">
+                <div class="player-name">
+                  {{ p.displayName }}
+                  @if (p.abandoned) { <span class="tag abandon-tag">Abandoned</span> }
+                </div>
+                <div class="player-mmr">
+                  <span class="mmr-before">{{ p.mmrBefore }}</span>
+                  @if (p.mmrAfter !== null) {
+                    @let d = mmrDelta(p);
+                    <span class="arrow">→</span>
+                    <span class="mmr-after">{{ p.mmrAfter }}</span>
+                    <span class="delta" [class.up]="d && d > 0" [class.down]="d && d < 0">
+                      {{ d && d > 0 ? '+' : '' }}{{ d }}
+                    </span>
+                  }
+                </div>
+              </div>
+              @if (p.kills !== null) {
+                <div class="player-kda" title="Kills / Deaths / Assists">
+                  <span class="kda-k">{{ p.kills }}</span>
+                  <span class="kda-sep">/</span>
+                  <span class="kda-d">{{ p.deaths }}</span>
+                  <span class="kda-sep">/</span>
+                  <span class="kda-a">{{ p.assists }}</span>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+}

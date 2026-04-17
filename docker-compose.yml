@@ -1,0 +1,25 @@
+# Phase 0: Postgres only — for local dev.
+# api / web / bot-worker / caddy services get added in later phases
+# once each has a Dockerfile (see plan, Phase 4–6 + deployment section).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: liga305-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-liga305}
+      POSTGRES_USER: ${POSTGRES_USER:-liga305}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liga305}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liga305} -d ${POSTGRES_DB:-liga305}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

@@ -1,0 +1,38 @@
+@let u = user();
+
+<header class="site-header">
+  <a routerLink="/" class="brand">
+    <span class="brand-mark">L305</span>
+    <span class="brand-name">Liga305</span>
+  </a>
+
+  <nav class="nav">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
+    <a routerLink="/leaderboard" routerLinkActive="active">Leaderboard</a>
+    <a routerLink="/queue" routerLinkActive="active">Queue</a>
+    <a routerLink="/matches" routerLinkActive="active">Matches</a>
+    <a routerLink="/seasons" routerLinkActive="active">Seasons</a>
+    @if (u) {
+      <a routerLink="/profile" routerLinkActive="active">Profile</a>
+    }
+    @if (u?.isAdmin) {
+      <a routerLink="/admin" routerLinkActive="active" class="admin-link">Admin</a>
+    }
+  </nav>
+
+  <div class="auth">
+    @if (!isReady()) {
+      <span class="muted">…</span>
+    } @else if (u) {
+      @if (u.avatarUrl) {
+        <img [src]="u.avatarUrl" alt="" class="avatar" />
+      } @else {
+        <span class="avatar avatar-placeholder">{{ u.displayName.charAt(0) }}</span>
+      }
+      <span class="name">{{ u.displayName }}</span>
+      <button type="button" (click)="logout()" class="btn btn-secondary">Sign out</button>
+    } @else {
+      <a [href]="steamLoginUrl" class="btn btn-steam">Sign in with Steam</a>
+    }
+  </div>
+</header>

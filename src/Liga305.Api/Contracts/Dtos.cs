@@ -1,0 +1,103 @@
+namespace Liga305.Api.Contracts;
+
+public record SeasonDto(
+    Guid Id,
+    string Name,
+    DateTime StartsAt,
+    DateTime EndsAt,
+    bool IsActive,
+    int PlayerCount,
+    int MatchCount);
+
+public record LeaderboardEntryDto(
+    int Rank,
+    Guid UserId,
+    string SteamId64,
+    string DisplayName,
+    string? AvatarUrl,
+    int Mmr,
+    int Rd,
+    int Wins,
+    int Losses,
+    int Abandons);
+
+public record QueueEntryDto(
+    Guid UserId,
+    string DisplayName,
+    string? AvatarUrl,
+    int Mmr,
+    DateTime EnqueuedAt);
+
+public record QueueStateDto(
+    Guid SeasonId,
+    int Size,
+    int Capacity,
+    bool SelfInQueue,
+    Guid? LastMatchId,
+    IReadOnlyList<QueueEntryDto> Entries);
+
+public record MatchSummaryDto(
+    Guid Id,
+    Guid SeasonId,
+    string SeasonName,
+    long? DotaMatchId,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? StartedAt,
+    DateTime? EndedAt,
+    int? DurationSec,
+    bool? RadiantWin,
+    int RadiantAvgMmr,
+    int DireAvgMmr);
+
+public record MatchPlayerDto(
+    Guid UserId,
+    string SteamId64,
+    string DisplayName,
+    string? AvatarUrl,
+    string Team,
+    int MmrBefore,
+    int? MmrAfter,
+    bool JoinedLobby,
+    bool Abandoned,
+    int? Kills,
+    int? Deaths,
+    int? Assists);
+
+public record MatchDetailDto(
+    Guid Id,
+    Guid SeasonId,
+    string SeasonName,
+    long? DotaMatchId,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? StartedAt,
+    DateTime? EndedAt,
+    int? DurationSec,
+    bool? RadiantWin,
+    int RadiantAvgMmr,
+    int DireAvgMmr,
+    string? LobbyName,
+    string? LobbyPassword,
+    string? BotSteamName,
+    DateTime? AbandonsAt,
+    IReadOnlyList<MatchPlayerDto> Players);
+
+public record MmrHistoryPointDto(
+    Guid MatchId,
+    DateTime At,
+    int MmrBefore,
+    int MmrAfter,
+    int Delta,
+    bool? RadiantWin,
+    bool Won);
+
+public record UpdateProfileRequest(string? DisplayName, string? AvatarUrl);
+
+public record ProfileResponse(
+    Guid Id,
+    string SteamId64,
+    string DisplayName,
+    string? AvatarUrl,
+    bool IsAdmin,
+    bool HasCustomProfile);

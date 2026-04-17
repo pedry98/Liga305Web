@@ -1,0 +1,114 @@
+.hero {
+  max-width: 720px;
+  margin: 4rem auto 3rem;
+  padding: 0 1.5rem;
+  text-align: center;
+
+  h1 {
+    font-size: 3.5rem;
+    margin: 0 0 0.5rem;
+    background: linear-gradient(135deg, #66c0f4, #79d3ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .tagline {
+    color: #8a98a5;
+    font-size: 1.15rem;
+    margin: 0 0 2rem;
+  }
+
+  .welcome { font-size: 1.05rem; color: #c7d5e0; }
+
+  .btn-steam {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.85rem 1.75rem;
+    background: #66c0f4;
+    color: #0e1a26;
+    border-radius: 0.4rem;
+    font-weight: 700;
+    text-decoration: none;
+    font-size: 1rem;
+    box-shadow: 0 4px 20px rgba(102, 192, 244, 0.25);
+
+    &:hover { filter: brightness(1.1); }
+  }
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  max-width: 920px;
+  margin: 0 auto 3rem;
+  padding: 0 1.5rem;
+}
+
+.card {
+  display: block;
+  background: #1b2838;
+  border: 1px solid #2d3a4a;
+  border-radius: 0.6rem;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s, transform 0.2s;
+
+  &:hover {
+    border-color: #66c0f4;
+    transform: translateY(-2px);
+
+    .card-cta { color: #79d3ff; }
+  }
+}
+
+.card-eyebrow {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #66c0f4;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  color: #e6e9ec;
+
+  .muted { color: #6c7884; font-weight: 400; }
+}
+
+.card-stat {
+  color: #8a98a5;
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+
+  .stat-num { color: #e6e9ec; font-weight: 700; }
+}
+
+.card-cta {
+  margin: 0;
+  color: #66c0f4;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+
+.progress {
+  height: 6px;
+  background: #0e1a26;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #66c0f4, #79d3ff);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}

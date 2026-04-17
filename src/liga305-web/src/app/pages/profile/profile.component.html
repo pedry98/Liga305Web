@@ -1,0 +1,158 @@
+@let u = user();
+
+@if (u) {
+  <section class="profile">
+    <header class="profile-header">
+      @if (u.avatarUrl) {
+        <img [src]="u.avatarUrl" alt="" class="avatar" />
+      } @else {
+        <span class="avatar avatar-placeholder">{{ u.displayName.charAt(0) }}</span>
+      }
+
+      <div class="profile-meta">
+        @if (!editing()) {
+          <h1>
+            {{ u.displayName }}
+            @if (u.hasCustomProfile) { <span class="custom-tag" title="Overrides Steam profile">custom</span> }
+          </h1>
+          <p class="muted mono">Steam ID {{ u.steamId64 }}</p>
+          @if (u.isAdmin) { <span class="badge">Admin</span> }
+          <div class="profile-actions">
+            <button type="button" class="btn btn-ghost" (click)="beginEdit()">Edit profile</button>
+          </div>
+        } @else {
+          <form class="edit-form" (ngSubmit)="save()">
+            <label class="field">
+              <span class="label">Display name</span>
+              <input
+                type="text"
+                [ngModel]="editName()"
+                (ngModelChange)="editName.set($event)"
+                name="displayName"
+                maxlength="32"
+                autocomplete="off"
+                [disabled]="saving() || uploading()" />
+              <span class="hint">2–32 chars. Letters, digits, spaces, and . _ -</span>
+            </label>
+
+            <label class="field">
+              <span class="label">Avatar URL</span>
+              <input
+                type="text"
+                [ngModel]="editAvatarUrl()"
+                (ngModelChange)="editAvatarUrl.set($event)"
+                name="avatarUrl"
+                placeholder="https://… or leave blank for no avatar"
+                autocomplete="off"
+                [disabled]="saving() || uploading()" />
+              <span class="hint">Or upload a file below — the URL field fills in automatically.</span>
+            </label>
+
+            <div class="upload-row">
+              <input #fileInput type="file" accept="image/png,image/jpeg,image/gif,image/webp"
+                     (change)="onFileChosen($event)" hidden />
+              <button type="button" class="btn btn-ghost" [disabled]="uploading() || saving()"
+                      (click)="triggerUpload()">
+                {{ uploading() ? 'Uploading…' : 'Upload image (max 2 MB)' }}
+              </button>
+            </div>
+
+            @if (editError(); as err) {
+              <p class="error">{{ err }}</p>
+            }
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" [disabled]="saving() || uploading()">
+                {{ saving() ? 'Saving…' : 'Save' }}
+              </button>
+              <button type="button" class="btn btn-ghost" (click)="cancelEdit()" [disabled]="saving() || uploading()">
+                Cancel
+              </button>
+              @if (u.hasCustomProfile) {
+                <button type="button" class="btn btn-ghost reset" (click)="resetToSteam()" [disabled]="saving() || uploading()">
+                  Reset to Steam profile
+                </button>
+              }
+            </div>
+          </form>
+        }
+      </div>
+    </header>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <span class="stat-label">Current MMR</span>
+        <span class="stat-value accent">{{ currentMmr() }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Peak</span>
+        <span class="stat-value">{{ peakMmr() }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Record</span>
+        <span class="stat-value">
+          <span class="win">{{ wins() }}W</span> –
+          <span class="loss">{{ losses() }}L</span>
+        </span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Win rate</span>
+        <span class="stat-value">{{ winrate() }}%</span>
+      </div>
+    </div>
+
+    @if (mmrHistory().length > 0) {
+      <div class="chart-card">
+        <div class="chart-head">
+          <h2>MMR history</h2>
+          <span class="muted">{{ mmrHistory().length }} matches</span>
+        </div>
+        <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" class="chart" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="mmrArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stop-color="#66c0f4" stop-opacity="0.35" />
+              <stop offset="100%" stop-color="#66c0f4" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <path [attr.d]="sparkArea()" fill="url(#mmrArea)" />
+          <path [attr.d]="sparkPath()" fill="none" stroke="#66c0f4" stroke-width="2" />
+          @for (pt of sparkPoints(); track pt.x) {
+            <circle [attr.cx]="pt.x" [attr.cy]="pt.y" r="3"
+                    [attr.fill]="pt.won ? '#7bc67f' : '#d9807e'" />
+          }
+        </svg>
+      </div>
+    }
+
+    <div class="section-head">
+      <h2>Recent matches</h2>
+      <a routerLink="/matches" class="see-all">See all →</a>
+    </div>
+
+    @if (recentMatches().length === 0) {
+      <p class="muted">No matches yet — join the queue to get started.</p>
+    } @else {
+      <ul class="recent-list">
+        @for (m of recentMatches(); track m.id) {
+          <li>
+            <a [routerLink]="['/matches', m.id]" class="recent-row">
+              <span class="status-dot" [class.live]="m.status === 'Live'"
+                                        [class.completed]="m.status === 'Completed'"
+                                        [class.abandoned]="m.status === 'Abandoned'"
+                                        [class.pending]="m.status === 'Draft' || m.status === 'Lobby'"></span>
+              <span class="recent-title">
+                Radiant {{ m.radiantAvgMmr }} vs Dire {{ m.direAvgMmr }}
+              </span>
+              <span class="recent-status">{{ m.status }}</span>
+              <span class="recent-time muted">{{ timeAgo(m.createdAt) }}</span>
+            </a>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+} @else if (isReady()) {
+  <p class="center">Not signed in.</p>
+} @else {
+  <p class="center">Loading…</p>
+}

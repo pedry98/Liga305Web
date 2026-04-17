@@ -1,0 +1,33 @@
+<section class="seasons-page">
+  <header class="page-header">
+    <h1>Seasons</h1>
+    <p class="muted">All seasons, past and present</p>
+  </header>
+
+  <ul class="season-list">
+    @for (s of seasons(); track s.id) {
+      <li class="season-card" [class.active]="s.isActive">
+        <header class="season-card-head">
+          <h2>{{ s.name }}</h2>
+          @if (s.isActive) {
+            <span class="badge badge-active">Active</span>
+          } @else {
+            <span class="badge badge-past">Ended</span>
+          }
+        </header>
+        <div class="season-dates">
+          {{ formatDate(s.startsAt) }} — {{ formatDate(s.endsAt) }}
+        </div>
+        <div class="season-stats">
+          <div><span class="stat-num">{{ s.playerCount }}</span> <span class="muted">players</span></div>
+          <div><span class="stat-num">{{ s.matchCount }}</span> <span class="muted">matches</span></div>
+        </div>
+        @if (s.isActive) {
+          <a routerLink="/leaderboard" class="btn-link">View leaderboard →</a>
+        } @else {
+          <span class="muted">Final standings archived</span>
+        }
+      </li>
+    }
+  </ul>
+</section>

@@ -1,0 +1,179 @@
+.center { text-align: center; padding: 4rem 1.5rem; }
+
+.gate {
+  max-width: 480px;
+  margin: 5rem auto;
+  padding: 2rem;
+  background: #1b2838;
+  border: 1px solid #2d3a4a;
+  border-radius: 0.5rem;
+  text-align: center;
+
+  h1 { margin: 0 0 0.75rem; }
+  .muted { color: #8a98a5; }
+  .small { font-size: 0.9rem; margin-top: 0.5rem; }
+}
+
+.admin-page {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+
+  h1 { margin: 0 0 0.25rem; font-size: 2rem; }
+  .muted { color: #8a98a5; margin: 0; }
+}
+
+.preview-tag {
+  padding: 0.3rem 0.7rem;
+  background: rgba(241, 196, 15, 0.12);
+  color: #f1c40f;
+  border: 1px solid rgba(241, 196, 15, 0.4);
+  border-radius: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid #2d3a4a;
+  margin-bottom: 1.5rem;
+
+  button {
+    background: transparent;
+    border: 0;
+    color: #8a98a5;
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+
+    &:hover { color: #c7d5e0; }
+    &.active { color: #66c0f4; border-bottom-color: #66c0f4; }
+  }
+}
+
+.section-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1b2838;
+  border: 1px solid #2d3a4a;
+  border-radius: 0.5rem;
+  overflow: hidden;
+
+  th, td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #2d3a4a;
+    font-size: 0.92rem;
+  }
+
+  thead th {
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a98a5;
+    font-weight: 600;
+  }
+
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: rgba(102, 192, 244, 0.04); }
+
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 0.85rem; color: #8a98a5; }
+
+  .banned-row {
+    opacity: 0.55;
+    td:first-child { color: #d9807e; }
+  }
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.avatar-sm {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  background: #2a3f5a;
+  color: #c7d5e0;
+  border-radius: 4px;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.btn {
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, color 0.15s, border-color 0.15s;
+  background: transparent;
+  color: inherit;
+
+  &.btn-primary {
+    background: #66c0f4;
+    color: #0e1a26;
+    &:hover { filter: brightness(1.1); }
+  }
+
+  &.btn-ghost {
+    color: #c7d5e0;
+    border-color: #2d3a4a;
+    &:hover { border-color: #66c0f4; color: #66c0f4; }
+
+    &.danger { color: #d9807e; &:hover { border-color: #d9807e; color: #ff8682; } }
+  }
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+
+  &.active { background: rgba(102, 192, 244, 0.12); color: #66c0f4; border-color: rgba(102, 192, 244, 0.35); }
+  &.ended  { background: rgba(138, 152, 165, 0.08); color: #a4b1bd; border-color: rgba(138, 152, 165, 0.25); }
+  &.admin  { background: rgba(241, 196, 15, 0.12); color: #f1c40f; border-color: rgba(241, 196, 15, 0.35); }
+  &.ok     { background: rgba(91, 168, 95, 0.12); color: #7bc67f; border-color: rgba(91, 168, 95, 0.3); }
+  &.banned { background: rgba(217, 83, 79, 0.12); color: #d9807e; border-color: rgba(217, 83, 79, 0.3); }
+}
+
+.muted { color: #8a98a5; }
+.small { font-size: 0.85rem; }

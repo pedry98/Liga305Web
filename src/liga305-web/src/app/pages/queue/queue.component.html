@@ -1,0 +1,85 @@
+@let s = state();
+@let u = user();
+
+<section class="queue-page">
+  <header class="page-header">
+    <h1>Queue</h1>
+    <p class="muted">10 players queue → match auto-creates → bot hosts the lobby</p>
+  </header>
+
+  <div class="queue-card" [class]="poppedClass()">
+    <div class="counter">
+      <span class="counter-num">{{ s.size }}</span>
+      <span class="counter-sep">/</span>
+      <span class="counter-cap">{{ s.capacity }}</span>
+    </div>
+
+    <div class="progress">
+      <div class="progress-bar" [style.width.%]="progress()"></div>
+    </div>
+
+    <p class="status-text">
+      @if (s.size >= s.capacity) {
+        Queue popped — match starting
+      } @else if (s.selfInQueue) {
+        You're in the queue. Waiting for {{ s.capacity - s.size }} more.
+      } @else {
+        {{ s.capacity - s.size }} more players needed
+      }
+    </p>
+
+    <div class="actions">
+      @if (!u) {
+        <a [href]="steamLoginUrl" class="btn btn-primary">Sign in to join</a>
+      } @else if (s.selfInQueue) {
+        <button type="button" class="btn btn-danger" [disabled]="busy()" (click)="leave()">
+          Leave queue
+        </button>
+      } @else {
+        <button type="button" class="btn btn-primary" [disabled]="busy() || s.size >= s.capacity" (click)="join()">
+          Join queue
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (u?.isAdmin) {
+    <div class="admin-tools">
+      <span class="admin-eyebrow">Admin / dev</span>
+      <div class="admin-actions">
+        <button type="button" class="btn btn-ghost" [disabled]="fillingBots()" (click)="fillBots()">
+          Fill queue with 9 test bots
+        </button>
+        <button type="button" class="btn btn-ghost" [disabled]="fillingBots()" (click)="clearBots()">
+          Clear test bots
+        </button>
+      </div>
+      @if (adminMessage(); as msg) {
+        <p class="admin-message">{{ msg }}</p>
+      }
+    </div>
+  }
+
+  <h2 class="section-title">In queue</h2>
+
+  @if (s.entries.length === 0) {
+    <p class="muted center">Nobody's queued yet — be the first.</p>
+  } @else {
+    <ul class="entries">
+      @for (entry of s.entries; track entry.userId) {
+        <li class="entry">
+          @if (entry.avatarUrl) {
+            <img [src]="entry.avatarUrl" alt="" class="avatar" />
+          } @else {
+            <span class="avatar avatar-placeholder">{{ entry.displayName.charAt(0) }}</span>
+          }
+          <span class="entry-name">
+            {{ entry.displayName }}
+            @if (entry.userId === u?.id) { <span class="you">you</span> }
+          </span>
+          <span class="entry-mmr">{{ entry.mmr }} MMR</span>
+        </li>
+      }
+    </ul>
+  }
+</section>

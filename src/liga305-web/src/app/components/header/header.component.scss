@@ -1,0 +1,111 @@
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.85rem 1.75rem;
+  background: #0e1a26;
+  color: #c7d5e0;
+  border-bottom: 1px solid #1f2c3a;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+
+  .brand-mark {
+    background: linear-gradient(135deg, #66c0f4, #1b6dad);
+    color: #0e1a26;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.3rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+  }
+
+  .brand-name {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+}
+
+.nav {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+
+  a {
+    color: #8a98a5;
+    text-decoration: none;
+    padding: 0.45rem 0.8rem;
+    border-radius: 0.3rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: color 0.15s, background 0.15s;
+
+    &:hover { color: #e6e9ec; background: rgba(255, 255, 255, 0.04); }
+    &.active { color: #66c0f4; background: rgba(102, 192, 244, 0.08); }
+
+    &.admin-link {
+      color: #f1c40f;
+      &:hover { color: #f8e46b; background: rgba(241, 196, 15, 0.08); }
+      &.active { color: #f1c40f; background: rgba(241, 196, 15, 0.12); }
+    }
+  }
+}
+
+.auth {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-placeholder {
+  background: #2a3f5a;
+  color: #c7d5e0;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.name { font-weight: 500; color: #e6e9ec; }
+.muted { color: #6c7884; font-style: italic; }
+
+.btn {
+  display: inline-block;
+  padding: 0.4rem 0.95rem;
+  border-radius: 0.3rem;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: filter 0.15s;
+
+  &.btn-steam {
+    background: #66c0f4;
+    color: #0e1a26;
+  }
+
+  &.btn-secondary {
+    background: transparent;
+    color: #c7d5e0;
+    border: 1px solid #2d3a4a;
+  }
+
+  &:hover { filter: brightness(1.1); }
+}

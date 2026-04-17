@@ -1,0 +1,175 @@
+@let u = user();
+
+@if (!isReady()) {
+  <p class="center">Loading…</p>
+} @else if (!canSee()) {
+  <section class="gate">
+    <h1>Admin console</h1>
+    @if (!u) {
+      <p class="muted">Sign in with Steam to continue.</p>
+    } @else {
+      <p class="muted">Your account doesn't have admin privileges.</p>
+      <p class="muted small">Ask an existing admin to grant you access.</p>
+    }
+    <button type="button" class="btn btn-ghost" (click)="enablePreview()">Preview console (mock)</button>
+  </section>
+} @else {
+  <section class="admin-page">
+    <header class="page-header">
+      <div>
+        <h1>Admin console</h1>
+        <p class="muted">Manage seasons, users, and live matches</p>
+      </div>
+      @if (preview() && !u?.isAdmin) {
+        <span class="preview-tag">Preview mode · not a real admin</span>
+      }
+    </header>
+
+    <nav class="tabs">
+      <button type="button" (click)="setTab('seasons')" [class.active]="tab() === 'seasons'">Seasons</button>
+      <button type="button" (click)="setTab('users')"   [class.active]="tab() === 'users'">Users</button>
+      <button type="button" (click)="setTab('matches')" [class.active]="tab() === 'matches'">Live matches</button>
+    </nav>
+
+    @switch (tab()) {
+      @case ('seasons') {
+        <div class="section-actions">
+          <button type="button" class="btn btn-primary">＋ New season</button>
+        </div>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Starts</th>
+              <th>Ends</th>
+              <th class="num">Players</th>
+              <th class="num">Matches</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of seasons(); track s.id) {
+              <tr>
+                <td>{{ s.name }}</td>
+                <td>
+                  @if (s.isActive) { <span class="badge active">Active</span> }
+                  @else { <span class="badge ended">Ended</span> }
+                </td>
+                <td>{{ formatDate(s.startsAt) }}</td>
+                <td>{{ formatDate(s.endsAt) }}</td>
+                <td class="num">{{ s.playerCount }}</td>
+                <td class="num">{{ s.matchCount }}</td>
+                <td class="row-actions">
+                  @if (s.isActive) {
+                    <button type="button" class="btn btn-ghost" (click)="endSeason(s)">End</button>
+                  }
+                  <button type="button" class="btn btn-ghost">Edit</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      @case ('users') {
+        <div class="section-actions">
+          <span class="muted">{{ users().length }} registered users</span>
+        </div>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Steam ID</th>
+              <th class="num">MMR</th>
+              <th class="num">W–L</th>
+              <th>Joined</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of users(); track u.id) {
+              <tr [class.banned-row]="u.isBanned">
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">{{ u.displayName.charAt(0) }}</span>
+                    <span>{{ u.displayName }}</span>
+                  </div>
+                </td>
+                <td class="mono">{{ u.steamId64 }}</td>
+                <td class="num">{{ u.mmr }}</td>
+                <td class="num">{{ u.wins }}–{{ u.losses }}</td>
+                <td>{{ formatDate(u.joinedAt) }}</td>
+                <td>
+                  @if (u.isAdmin) { <span class="badge admin">Admin</span> }
+                  @else { <span class="muted">Player</span> }
+                </td>
+                <td>
+                  @if (u.isBanned) { <span class="badge banned">Banned</span> }
+                  @else { <span class="badge ok">Active</span> }
+                </td>
+                <td class="row-actions">
+                  <button type="button" class="btn btn-ghost" (click)="toggleAdmin(u)">
+                    {{ u.isAdmin ? 'Revoke admin' : 'Make admin' }}
+                  </button>
+                  <button type="button" class="btn btn-ghost"
+                          [class.danger]="!u.isBanned"
+                          (click)="toggleBan(u)">
+                    {{ u.isBanned ? 'Unban' : 'Ban' }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      @case ('matches') {
+        <div class="section-actions">
+          <span class="muted">Non-completed matches are listed first</span>
+        </div>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Match</th>
+              <th>Status</th>
+              <th class="num">Radiant avg</th>
+              <th class="num">Dire avg</th>
+              <th>Dota match ID</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of activeMatches(); track m.id) {
+              <tr>
+                <td>
+                  <a [routerLink]="['/matches', m.id]">#{{ m.id.replace('match-', '') }}</a>
+                </td>
+                <td>
+                  <span class="badge" [class.active]="m.status === 'Live'"
+                                       [class.ended]="m.status === 'Completed'"
+                                       [class.banned]="m.status === 'Abandoned'"
+                                       [class.ok]="m.status === 'Lobby'">
+                    {{ m.status }}
+                  </span>
+                </td>
+                <td class="num">{{ m.radiantAvgMmr }}</td>
+                <td class="num">{{ m.direAvgMmr }}</td>
+                <td class="mono">{{ m.dotaMatchId ?? '—' }}</td>
+                <td class="row-actions">
+                  @if (m.status === 'Live' || m.status === 'Lobby' || m.status === 'Draft') {
+                    <button type="button" class="btn btn-ghost danger" (click)="cancelMatch(m)">Force cancel</button>
+                  } @else {
+                    <span class="muted small">—</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+  </section>
+}

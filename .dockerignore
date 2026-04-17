@@ -1,0 +1,37 @@
+# Build outputs
+**/bin/
+**/obj/
+**/dist/
+**/node_modules/
+**/.angular/cache/
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/.vs/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets
+**/.env
+**/.env.local
+**/.env.*.local
+**/appsettings.Development.json
+**/appsettings.Local.json
+
+# Deploy state
+deploy/.env
+
+# Git
+.git/
+.gitignore
+
+# Local avatars from dev
+src/Liga305.Api/wwwroot/avatars/*
+!src/Liga305.Api/wwwroot/avatars/.gitkeep
+
+# Docker-in-docker / tooling
+docker-compose.yml
