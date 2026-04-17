@@ -2,12 +2,27 @@ using AspNet.Security.OpenId.Steam;
 using Liga305.Infrastructure;
 using Liga305.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// We run behind Caddy (or any reverse proxy in prod). Trust X-Forwarded-* so
+// Request.Scheme reflects the real "https" — without this, the Steam OpenID
+// callback URL is built as http:// and Steam's signature validation fails.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                             | ForwardedHeaders.XForwardedProto
+                             | ForwardedHeaders.XForwardedHost;
+    // Containers don't share the host's link-local subnet; we trust everything
+    // since the API is only reachable through Caddy on the docker network.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddLiga305Infrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
@@ -75,6 +90,9 @@ if (app.Environment.IsDevelopment())
         app.Logger.LogWarning(ex, "Database migration/seeding on startup failed (Postgres not running?). The app will continue, but DB-backed endpoints will return errors.");
     }
 }
+
+// MUST run before auth so Request.Scheme is correct when OpenID builds redirect URLs.
+app.UseForwardedHeaders();
 
 app.UseStaticFiles();
 app.UseCors();
