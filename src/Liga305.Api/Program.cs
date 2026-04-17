@@ -65,7 +65,15 @@ builder.Services
     })
     .AddSteam(options =>
     {
-        options.ApplicationKey = builder.Configuration["Steam:WebApiKey"] ?? "";
+        // Only attach the API key when it's actually set. With an empty key
+        // Steam returns 403 ("verify your key= parameter") and the entire
+        // sign-in fails. Without a key, the library skips profile enrichment
+        // (DisplayName falls back to the SteamID until the user edits it).
+        var steamKey = builder.Configuration["Steam:WebApiKey"];
+        if (!string.IsNullOrWhiteSpace(steamKey))
+        {
+            options.ApplicationKey = steamKey;
+        }
     });
 
 builder.Services.AddAuthorization();
