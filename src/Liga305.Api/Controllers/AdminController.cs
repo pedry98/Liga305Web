@@ -20,6 +20,106 @@ public class AdminController(
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
+    /// List every registered user with their active-season aggregates so the admin
+    /// console can show a real users table.
+    /// </summary>
+    [HttpGet("users")]
+    public async Task<IActionResult> ListUsers()
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var activeSeason = await db.Seasons.FirstOrDefaultAsync(s => s.IsActive);
+        var seasonId = activeSeason?.Id;
+
+        var rows = await db.Users
+            .OrderBy(u => u.DisplayName)
+            .Select(u => new
+            {
+                u.Id,
+                u.SteamId64,
+                u.DisplayName,
+                u.AvatarUrl,
+                u.IsAdmin,
+                u.IsBanned,
+                u.CreatedAt,
+                Mmr = seasonId == null ? (double?)null : db.SeasonPlayers
+                    .Where(sp => sp.SeasonId == seasonId && sp.UserId == u.Id)
+                    .Select(sp => (double?)sp.Mmr).FirstOrDefault(),
+                Wins = seasonId == null ? 0 : db.SeasonPlayers
+                    .Where(sp => sp.SeasonId == seasonId && sp.UserId == u.Id)
+                    .Select(sp => sp.Wins).FirstOrDefault(),
+                Losses = seasonId == null ? 0 : db.SeasonPlayers
+                    .Where(sp => sp.SeasonId == seasonId && sp.UserId == u.Id)
+                    .Select(sp => sp.Losses).FirstOrDefault(),
+                Abandons = seasonId == null ? 0 : db.SeasonPlayers
+                    .Where(sp => sp.SeasonId == seasonId && sp.UserId == u.Id)
+                    .Select(sp => sp.Abandons).FirstOrDefault()
+            })
+            .ToListAsync();
+
+        var result = rows.Select(r => new
+        {
+            id = r.Id,
+            steamId64 = r.SteamId64,
+            displayName = r.DisplayName,
+            avatarUrl = r.AvatarUrl,
+            mmr = r.Mmr is null ? (int?)null : (int)Math.Round(r.Mmr.Value),
+            wins = r.Wins,
+            losses = r.Losses,
+            abandons = r.Abandons,
+            isAdmin = r.IsAdmin,
+            isBanned = r.IsBanned,
+            joinedAt = r.CreatedAt
+        });
+        return Ok(result);
+    }
+
+    /// <summary>Toggle the admin flag on a user.</summary>
+    [HttpPost("users/{id:guid}/toggle-admin")]
+    public async Task<IActionResult> ToggleAdmin(Guid id)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null) return NotFound();
+
+        // Refuse to demote yourself if you'd leave the league with zero admins.
+        if (user.Id == me.Id && user.IsAdmin)
+        {
+            var otherAdmins = await db.Users.AnyAsync(u => u.Id != me.Id && u.IsAdmin);
+            if (!otherAdmins) return Conflict(new { error = "would_leave_no_admins" });
+        }
+
+        user.IsAdmin = !user.IsAdmin;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Admin {Admin} {Action} on user {User}",
+            me.DisplayName, user.IsAdmin ? "granted admin" : "revoked admin", user.DisplayName);
+        return Ok(new { isAdmin = user.IsAdmin });
+    }
+
+    /// <summary>Toggle the banned flag on a user.</summary>
+    [HttpPost("users/{id:guid}/toggle-ban")]
+    public async Task<IActionResult> ToggleBan(Guid id)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null) return NotFound();
+        if (user.Id == me.Id) return Conflict(new { error = "cant_ban_self" });
+
+        user.IsBanned = !user.IsBanned;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Admin {Admin} {Action} user {User}",
+            me.DisplayName, user.IsBanned ? "banned" : "unbanned", user.DisplayName);
+        return Ok(new { isBanned = user.IsBanned });
+    }
+
+    /// <summary>
     /// Force-cancel a match: destroys the Dota lobby and marks the match Abandoned.
     /// </summary>
     [HttpPost("matches/{id:guid}/cancel")]

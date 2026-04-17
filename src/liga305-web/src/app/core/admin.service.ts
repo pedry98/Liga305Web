@@ -3,10 +3,50 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
+export interface AdminUser {
+  id: string;
+  steamId64: string;
+  displayName: string;
+  avatarUrl: string | null;
+  mmr: number | null;
+  wins: number;
+  losses: number;
+  abandons: number;
+  isAdmin: boolean;
+  isBanned: boolean;
+  joinedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminService {
   private readonly http = inject(HttpClient);
   private readonly api = environment.apiBaseUrl;
+
+  listUsers(): Promise<AdminUser[]> {
+    return firstValueFrom(
+      this.http.get<AdminUser[]>(`${this.api}/admin/users`, { withCredentials: true })
+    );
+  }
+
+  toggleAdmin(userId: string): Promise<{ isAdmin: boolean }> {
+    return firstValueFrom(
+      this.http.post<{ isAdmin: boolean }>(
+        `${this.api}/admin/users/${userId}/toggle-admin`,
+        null,
+        { withCredentials: true }
+      )
+    );
+  }
+
+  toggleBan(userId: string): Promise<{ isBanned: boolean }> {
+    return firstValueFrom(
+      this.http.post<{ isBanned: boolean }>(
+        `${this.api}/admin/users/${userId}/toggle-ban`,
+        null,
+        { withCredentials: true }
+      )
+    );
+  }
 
   fillQueueWithBots(targetSize = 9): Promise<{ added: number; queueSize: number }> {
     return firstValueFrom(

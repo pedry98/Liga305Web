@@ -74,8 +74,17 @@
 
       @case ('users') {
         <div class="section-actions">
-          <span class="muted">{{ users().length }} registered users</span>
+          <span class="muted">
+            @if (usersLoading()) { Loading… }
+            @else { {{ users().length }} registered users }
+          </span>
+          <button type="button" class="btn btn-ghost" (click)="loadUsers()" [disabled]="usersLoading()">
+            Refresh
+          </button>
         </div>
+        @if (usersError(); as err) {
+          <p class="error">{{ err }}</p>
+        }
         <table class="admin-table">
           <thead>
             <tr>
@@ -83,6 +92,7 @@
               <th>Steam ID</th>
               <th class="num">MMR</th>
               <th class="num">W–L</th>
+              <th class="num">Abandons</th>
               <th>Joined</th>
               <th>Role</th>
               <th>Status</th>
@@ -94,13 +104,18 @@
               <tr [class.banned-row]="u.isBanned">
                 <td>
                   <div class="user-cell">
-                    <span class="avatar-sm">{{ u.displayName.charAt(0) }}</span>
+                    @if (u.avatarUrl) {
+                      <img [src]="u.avatarUrl" alt="" class="avatar-sm" />
+                    } @else {
+                      <span class="avatar-sm">{{ u.displayName.charAt(0) }}</span>
+                    }
                     <span>{{ u.displayName }}</span>
                   </div>
                 </td>
                 <td class="mono">{{ u.steamId64 }}</td>
-                <td class="num">{{ u.mmr }}</td>
+                <td class="num">{{ u.mmr ?? '—' }}</td>
                 <td class="num">{{ u.wins }}–{{ u.losses }}</td>
+                <td class="num">{{ u.abandons }}</td>
                 <td>{{ formatDate(u.joinedAt) }}</td>
                 <td>
                   @if (u.isAdmin) { <span class="badge admin">Admin</span> }
@@ -121,6 +136,9 @@
                   </button>
                 </td>
               </tr>
+            }
+            @if (!usersLoading() && users().length === 0) {
+              <tr><td colspan="9" class="empty">No users yet — they'll appear after their first sign-in.</td></tr>
             }
           </tbody>
         </table>
