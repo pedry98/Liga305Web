@@ -31,6 +31,7 @@ bot = DotaBot(BotConfig(
     steam_shared_secret=os.environ.get("BOT_STEAM_SHARED_SECRET") or None,
     server_region=int(os.environ.get("DOTA_SERVER_REGION", "2")),
     game_mode=int(os.environ.get("DOTA_GAME_MODE", "1")),
+    cm_pick=int(os.environ.get("DOTA_CM_PICK", "0")),
     api_base_url=os.environ.get("API_BASE_URL", "http://localhost:5080"),
     worker_shared_secret=SHARED_SECRET,
     abandon_timeout_sec=int(os.environ.get("ABANDON_TIMEOUT_SEC", "240")),

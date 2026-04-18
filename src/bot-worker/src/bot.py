@@ -91,6 +91,7 @@ class BotConfig:
     api_base_url: str
     worker_shared_secret: str
     abandon_timeout_sec: int = 240
+    cm_pick: int = 0
 
 
 class DotaBot:
@@ -218,6 +219,7 @@ class DotaBot:
                         "game_name": lobby_name,
                         "server_region": self.cfg.server_region,
                         "game_mode": self.cfg.game_mode,
+                        "cm_pick": self.cfg.cm_pick,
                         "allow_cheats": False,
                         "fill_with_bots": False,
                         "allow_spectating": True,
