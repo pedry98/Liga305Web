@@ -218,12 +218,6 @@ class DotaBot:
                         "visibility": LOBBY_VISIBILITY_PUBLIC,
                     },
                 )
-                # The GC parks the lobby creator on Radiant slot 0 by default.
-                # Move the bot OUT of the team into the broadcaster channel so it
-                # doesn't occupy a player slot. If the GC is slow, the per-event
-                # handler will re-issue the move on the next lobby_changed.
-                gevent.sleep(1.0)
-                self._move_bot_off_team()
 
                 with self._lock:
                     am = ActiveMatch(match_id=match_id, players=players, password="")
@@ -242,12 +236,18 @@ class DotaBot:
                     except Exception:
                         log.exception("invite to %s failed", p.steam_id_64)
 
+                # Return the lobby info to the API caller IMMEDIATELY. Moving
+                # the bot off the player slot is best-effort and runs in the
+                # background — the per-event safety net keeps it off-team even
+                # if this initial move loses to a race.
                 result_event.set({
                     "lobbyName": lobby_name,
                     "password": "",
                     "botSteamName": self.cfg.steam_username or "liga305-bot",
                     "simulated": False,
                 })
+
+                gevent.spawn_later(1.5, self._move_bot_off_team)
             except Exception as e:
                 log.exception("create_lobby failed")
                 result_event.set_exception(e)
@@ -314,27 +314,20 @@ class DotaBot:
     def _move_bot_off_team(self) -> None:
         """Park the bot in the broadcaster channel so it never holds a Radiant/Dire slot.
 
-        The GC drops the lobby creator into Radiant slot 0 on creation. We can't
-        ask the GC to "leave team", but we can:
-          1. Move ourselves into the player pool (no team) via join_practice_lobby_team
-             with team=PLAYER_POOL — clears the Radiant slot.
-          2. Then join the broadcaster channel so we still appear in the lobby
-             (clients show us above the Radiant team).
+        Debounced: we only re-issue at most once every 5 seconds so the per-event
+        safety-net can't spin in a tight loop with the GC's lobby_changed echoes.
         """
         if not self._dota:
             return
+        now = time.monotonic()
+        last = getattr(self, "_last_bot_move_at", 0.0)
+        if now - last < 5.0:
+            return
+        self._last_bot_move_at = now
         try:
-            # Step 1: clear our team slot. Some library versions only accept
-            # the GOOD_GUYS/BAD_GUYS values for team, so wrap each call.
-            try:
-                self._dota.join_practice_lobby_team(slot=1, team=TEAM_PLAYER_POOL)
-            except Exception:
-                log.exception("join_practice_lobby_team(PLAYER_POOL) failed; trying broadcast directly")
-            gevent.sleep(0.3)
-            # Step 2: actually become a broadcaster so we still see lobby state.
             self._dota.join_practice_lobby_broadcast_channel(1)
         except Exception:
-            log.exception("_move_bot_off_team failed")
+            log.exception("join_practice_lobby_broadcast_channel failed")
 
     # ---------- lobby event handlers (FACEIT-style enforcement) ----------
 
