@@ -61,38 +61,39 @@ export class AdminComponent {
   enablePreview() { this.preview.set(true); }
 
   constructor() {
-    this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
+    // Public data loads immediately — no auth dependency, no effect timing risk.
+    this.loadSeasons();
+    this.loadMatches();
 
-    // Load whatever the active tab needs whenever (a) the gate opens or (b) the tab changes.
+    // Users requires admin. Load the moment canSee flips true (auth resolves
+    // after the constructor) AND the user is on the Users tab.
     effect(() => {
-      if (!this.canSee()) return;
-      const t = this.tab();
-      if (t === 'users') this.loadUsers();
-      else if (t === 'seasons') this.loadSeasons();
-      else if (t === 'matches') this.loadMatches();
+      if (this.canSee() && this.tab() === 'users') this.loadUsers();
     });
   }
 
-  // Refresh the current tab whenever the window regains focus — keeps user list,
-  // season list, and live matches honest without a manual refresh button.
+  // Refresh the active tab whenever the window regains focus — keeps lists fresh
+  // without a manual refresh button.
   @HostListener('window:focus')
   onWindowFocus() {
-    if (!this.canSee()) return;
-    const t = this.tab();
-    if (t === 'users') this.loadUsers();
-    else if (t === 'seasons') this.loadSeasons();
-    else if (t === 'matches') this.loadMatches();
+    this.refreshActiveTab();
   }
 
   setTab(t: Tab) {
-    if (this.tab() === t) {
-      // Re-clicking the active tab acts as a manual refresh.
-      if (t === 'users') this.loadUsers();
-      else if (t === 'seasons') this.loadSeasons();
-      else if (t === 'matches') this.loadMatches();
-      return;
-    }
     this.tab.set(t);
+    // Always re-fetch whichever tab the user just clicked (acts as refresh too).
+    this.refreshActiveTab();
+  }
+
+  private refreshActiveTab() {
+    const t = this.tab();
+    if (t === 'users') {
+      if (this.canSee()) this.loadUsers();
+    } else if (t === 'seasons') {
+      this.loadSeasons();
+    } else if (t === 'matches') {
+      this.loadMatches();
+    }
   }
 
   // ----- Seasons -----
