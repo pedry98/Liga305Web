@@ -33,6 +33,12 @@ TEAM_BROADCASTER = 2
 TEAM_SPECTATOR = 3
 TEAM_PLAYER_POOL = 4
 
+# Seconds to wait between detecting "all 10 on correct teams" and actually
+# firing launch_practice_lobby(). Gives every player's Dota client time to
+# sync final lobby state with the GC, which the dedicated-server connect
+# handshake depends on. Too short → players miss the 30-sec connect window.
+LAUNCH_GRACE_SEC = 5
+
 log = logging.getLogger("bot")
 
 # Steam offset for converting SteamID64 ↔ AccountID32.
@@ -67,6 +73,7 @@ class ActiveMatch:
     password: str
     abandon_timer: Optional[gevent.Greenlet] = None
     launched: bool = False
+    launch_pending: bool = False
     cancelled: bool = False
     match_id_reported: bool = False
     # account_ids we've already kicked-from-team for being on the wrong side, so we don't
@@ -311,23 +318,78 @@ class DotaBot:
         gevent.spawn(do_invites)
         return len(am.players)
 
-    def _move_bot_off_team(self) -> None:
-        """Park the bot in the broadcaster channel so it never holds a Radiant/Dire slot.
-
-        Debounced: we only re-issue at most once every 5 seconds so the per-event
-        safety-net can't spin in a tight loop with the GC's lobby_changed echoes.
+    def _do_launch(self, match_id: str) -> None:
+        """Fire launch_practice_lobby() for `match_id` if the lobby is still
+        in a launchable state. Called via gevent.spawn_later after the grace
+        period — re-verifies the roster before pulling the trigger so that a
+        player dropping during the grace window aborts the launch cleanly.
         """
-        if not self._dota:
+        with self._lock:
+            am = self._matches.get(match_id)
+        if not am or am.cancelled or am.launched:
+            return
+        if not self._dota or not self._dota.lobby:
+            log.warning("launch aborted — Dota client/lobby not available (match %s)", match_id)
+            am.launch_pending = False
+            return
+
+        members = list(getattr(self._dota.lobby, "all_members", []) or [])
+        current = {int(getattr(m, "id", 0) or 0): int(getattr(m, "team", -1)) for m in members}
+        expected = {int(p.steam_id_64): p.expected_team for p in am.players}
+        if not all(current.get(s) == t for s, t in expected.items()):
+            log.info("launch aborted — roster no longer in correct slots (match %s)", match_id)
+            am.launch_pending = False
+            return
+
+        am.launched = True
+        am.launch_pending = False
+        if am.abandon_timer:
+            am.abandon_timer.kill()
+            am.abandon_timer = None
+
+        # Belt-and-braces: ensure the bot is NOT on a player team OR holding a
+        # broadcaster/spectator slot the dedicated server would wait for. Force
+        # the move-to-PLAYER_POOL one more time, with the debounce bypassed.
+        self._last_bot_move_at = 0.0
+        self._move_bot_off_team()
+
+        log.info("launching match %s now", match_id)
+        try:
+            self._dota.launch_practice_lobby()
+        except Exception:
+            log.exception("launch_practice_lobby failed")
+            am.launched = False
+
+    def _move_bot_off_team(self) -> None:
+        """Park the bot in the PLAYER_POOL (no team, no slot) so it never holds
+        a Radiant/Dire slot AND doesn't get treated as a broadcaster/spectator
+        the dedicated server has to wait for during launch.
+
+        Why not broadcaster? In Dota practice lobbies, BROADCASTER (team=2) is
+        a caster slot — the dedicated server waits for those clients to
+        actually connect during the 30-sec launch window. Our bot is a GC-only
+        client (no real Dota game running), so it can never connect, and the
+        launch times out for everyone. PLAYER_POOL (team=4) is "unassigned" —
+        the bot stays visible in the lobby but the launch ignores it.
+
+        Mechanism: practice_lobby_kick_from_team on the bot's own account_id
+        moves it from any team into PLAYER_POOL.
+
+        Debounced: only re-issue once every 5 seconds so the per-event safety-
+        net can't spin in a tight loop with the GC's lobby_changed echoes.
+        """
+        if not self._dota or not self._steam or not self._steam.steam_id:
             return
         now = time.monotonic()
         last = getattr(self, "_last_bot_move_at", 0.0)
         if now - last < 5.0:
             return
         self._last_bot_move_at = now
+        bot_account_id = int(self._steam.steam_id) - _STEAM_ID_BASE
         try:
-            self._dota.join_practice_lobby_broadcast_channel(1)
+            self._dota.practice_lobby_kick_from_team(bot_account_id)
         except Exception:
-            log.exception("join_practice_lobby_broadcast_channel failed")
+            log.exception("practice_lobby_kick_from_team(self) failed")
 
     # ---------- lobby event handlers (FACEIT-style enforcement) ----------
 
@@ -389,7 +451,11 @@ class DotaBot:
                             log.exception("kick-from-team failed for steam_id=%d", steam_id)
 
         # 3. Auto-launch when all 10 roster players are on their assigned teams.
-        if not am.launched:
+        #    We delay the actual launch by LAUNCH_GRACE_SEC so every Dota client
+        #    has time to sync the final lobby state — launching the instant the
+        #    10th player slots in often beats their client's GC sync, and they
+        #    fail the 30-second connect-to-server handshake.
+        if not am.launched and not am.launch_pending:
             current_team_by_steam_id = {
                 int(getattr(m, "id", 0) or 0): int(getattr(m, "team", -1)) for m in members
             }
@@ -398,16 +464,10 @@ class DotaBot:
                 for s, t in expected_team_by_steam_id.items()
             )
             if ready:
-                am.launched = True
-                if am.abandon_timer:
-                    am.abandon_timer.kill()
-                    am.abandon_timer = None
-                log.info("all 10 on correct teams — launching match %s", am.match_id)
-                try:
-                    self._dota.launch_practice_lobby()
-                except Exception:
-                    log.exception("launch_practice_lobby failed")
-                    am.launched = False
+                am.launch_pending = True
+                log.info("all 10 on correct teams — launching match %s in %ds",
+                         am.match_id, LAUNCH_GRACE_SEC)
+                gevent.spawn_later(LAUNCH_GRACE_SEC, self._do_launch, am.match_id)
 
         # 4. If the GC has assigned a match_id, report it to the API.
         match_id_value = int(getattr(lobby, "match_id", 0) or 0)
