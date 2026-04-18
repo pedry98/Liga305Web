@@ -91,6 +91,16 @@ export class AdminService {
     );
   }
 
+  kickFromQueue(userId: string): Promise<{ kicked: true; userId: string }> {
+    return firstValueFrom(
+      this.http.post<{ kicked: true; userId: string }>(
+        `${this.api}/admin/queue/kick/${userId}`,
+        null,
+        { withCredentials: true }
+      )
+    );
+  }
+
   clearTestBots(): Promise<{ cancelled: number }> {
     return firstValueFrom(
       this.http.post<{ cancelled: number }>(

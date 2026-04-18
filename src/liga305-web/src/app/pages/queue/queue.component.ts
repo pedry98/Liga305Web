@@ -88,6 +88,16 @@ export class QueueComponent {
     }
   }
 
+  async kick(userId: string, displayName: string) {
+    if (!confirm(`Kick ${displayName} from the queue?`)) return;
+    try {
+      await this.admin.kickFromQueue(userId);
+      this.queue.load().subscribe();
+    } catch (e: any) {
+      alert(e?.error?.error ?? 'Could not kick player.');
+    }
+  }
+
   async clearBots() {
     if (this.fillingBots()) return;
     this.fillingBots.set(true);

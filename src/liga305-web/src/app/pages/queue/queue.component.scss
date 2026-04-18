@@ -203,3 +203,25 @@
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
 }
+
+.btn-kick {
+  margin-left: 0.5rem;
+  background: transparent;
+  color: #d9807e;
+  border: 1px solid rgba(217, 83, 79, 0.4);
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: rgba(217, 83, 79, 0.12);
+    color: #ff8682;
+    border-color: #ff8682;
+  }
+}

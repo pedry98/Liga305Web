@@ -476,6 +476,33 @@ public class AdminController(
     }
 
     /// <summary>
+    /// Kicks a single user from the active season's queue. Cancels their queued entry
+    /// without affecting their MMR or season enrollment. No-op if they're not queued.
+    /// </summary>
+    [HttpPost("queue/kick/{userId:guid}")]
+    public async Task<IActionResult> KickFromQueue(Guid userId)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.IsActive);
+        if (season is null) return Conflict(new { error = "no_active_season" });
+
+        var entry = await db.QueueEntries
+            .Include(q => q.User)
+            .FirstOrDefaultAsync(q => q.SeasonId == season.Id
+                                     && q.UserId == userId
+                                     && q.Status == QueueStatus.Queued);
+        if (entry is null) return NotFound(new { error = "not_in_queue" });
+
+        entry.Status = QueueStatus.Cancelled;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Admin {Admin} kicked {User} from queue", me.DisplayName, entry.User.DisplayName);
+        return Ok(new { kicked = true, userId });
+    }
+
+    /// <summary>
     /// Removes any TestBot users from the queue. Useful between dev runs.
     /// </summary>
     [HttpPost("queue/clear-bots")]

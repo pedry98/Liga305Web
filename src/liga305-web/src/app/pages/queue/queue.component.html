@@ -78,6 +78,12 @@
             @if (entry.userId === u?.id) { <span class="you">you</span> }
           </span>
           <span class="entry-mmr">{{ entry.mmr }} MMR</span>
+          @if (u?.isAdmin && entry.userId !== u?.id) {
+            <button type="button" class="btn-kick" title="Kick from queue"
+                    (click)="kick(entry.userId, entry.displayName)">
+              Kick
+            </button>
+          }
         </li>
       }
     </ul>
