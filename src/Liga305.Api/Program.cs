@@ -83,8 +83,13 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+}
 
-    using var scope = app.Services.CreateScope();
+// Apply pending migrations + seed bootstrap data on every startup, in every
+// environment. Production previously skipped this and silently drifted from
+// the codebase — new columns referenced by app code were missing in Neon.
+using (var scope = app.Services.CreateScope())
+{
     var db = scope.ServiceProvider.GetRequiredService<Liga305DbContext>();
     try
     {
