@@ -94,6 +94,138 @@ public class AdminController(
     }
 
     /// <summary>
+    /// Create a new season. If <paramref name="req"/>.MakeActive is true (default),
+    /// any currently-active season is ended first, the new one is flagged active,
+    /// and every existing user is auto-enrolled at the season's StartingMmr.
+    /// </summary>
+    [HttpPost("seasons")]
+    public async Task<IActionResult> CreateSeason([FromBody] CreateSeasonRequest req)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "name_required" });
+        if (req.EndsAt <= req.StartsAt) return BadRequest(new { error = "ends_before_starts" });
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        if (req.MakeActive)
+        {
+            // End any currently-active season(s) before activating the new one.
+            await db.Seasons.Where(s => s.IsActive).ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.IsActive, false)
+                .SetProperty(x => x.EndsAt, DateTime.UtcNow));
+        }
+
+        var season = new Season
+        {
+            Id = Guid.NewGuid(),
+            Name = req.Name.Trim(),
+            StartsAt = DateTime.SpecifyKind(req.StartsAt, DateTimeKind.Utc),
+            EndsAt = DateTime.SpecifyKind(req.EndsAt, DateTimeKind.Utc),
+            IsActive = req.MakeActive,
+            StartingMmr = req.StartingMmr ?? 1000,
+            StartingRd = 350,
+            StartingVolatility = 0.06,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Seasons.Add(season);
+
+        if (req.MakeActive)
+        {
+            // Auto-enroll every existing user (skip TestBots — they get cleared on reset).
+            var userIds = await db.Users
+                .Where(u => !u.SteamId64.StartsWith("1000000000000000"))
+                .Select(u => u.Id)
+                .ToListAsync();
+
+            foreach (var uid in userIds)
+            {
+                db.SeasonPlayers.Add(new SeasonPlayer
+                {
+                    SeasonId = season.Id,
+                    UserId = uid,
+                    Mmr = season.StartingMmr,
+                    Rd = season.StartingRd,
+                    Volatility = season.StartingVolatility,
+                    JoinedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        logger.LogWarning("Admin {Admin} created season {Name} (active={Active})",
+            me.DisplayName, season.Name, season.IsActive);
+
+        return Ok(new
+        {
+            id = season.Id,
+            name = season.Name,
+            startsAt = season.StartsAt,
+            endsAt = season.EndsAt,
+            isActive = season.IsActive,
+            playerCount = req.MakeActive ? await db.SeasonPlayers.CountAsync(sp => sp.SeasonId == season.Id) : 0,
+            matchCount = 0
+        });
+    }
+
+    public record CreateSeasonRequest(string Name, DateTime StartsAt, DateTime EndsAt, bool MakeActive = true, double? StartingMmr = null);
+
+    /// <summary>End a season early (or close one already past its EndsAt). Marks it inactive.</summary>
+    [HttpPost("seasons/{id:guid}/end")]
+    public async Task<IActionResult> EndSeason(Guid id)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.Id == id);
+        if (season is null) return NotFound();
+        if (!season.IsActive) return Conflict(new { error = "already_ended" });
+
+        season.IsActive = false;
+        if (season.EndsAt > DateTime.UtcNow) season.EndsAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        logger.LogWarning("Admin {Admin} ended season {Name}", me.DisplayName, season.Name);
+        return Ok(new { id = season.Id, isActive = false, endsAt = season.EndsAt });
+    }
+
+    /// <summary>Edit a season's name and/or scheduled dates. Does not change active status.</summary>
+    [HttpPatch("seasons/{id:guid}")]
+    public async Task<IActionResult> UpdateSeason(Guid id, [FromBody] UpdateSeasonRequest req)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.Id == id);
+        if (season is null) return NotFound();
+
+        if (req.Name is { } name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return BadRequest(new { error = "name_required" });
+            season.Name = name.Trim();
+        }
+        if (req.StartsAt is { } starts) season.StartsAt = DateTime.SpecifyKind(starts, DateTimeKind.Utc);
+        if (req.EndsAt is { } ends) season.EndsAt = DateTime.SpecifyKind(ends, DateTimeKind.Utc);
+        if (season.EndsAt <= season.StartsAt) return BadRequest(new { error = "ends_before_starts" });
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Admin {Admin} updated season {Name}", me.DisplayName, season.Name);
+        return Ok(new
+        {
+            id = season.Id,
+            name = season.Name,
+            startsAt = season.StartsAt,
+            endsAt = season.EndsAt,
+            isActive = season.IsActive
+        });
+    }
+
+    public record UpdateSeasonRequest(string? Name, DateTime? StartsAt, DateTime? EndsAt);
+
+    /// <summary>
     /// List every registered user with their active-season aggregates so the admin
     /// console can show a real users table.
     /// </summary>

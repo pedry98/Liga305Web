@@ -39,8 +39,50 @@
     @switch (tab()) {
       @case ('seasons') {
         <div class="section-actions">
-          <button type="button" class="btn btn-primary">＋ New season</button>
+          <span class="muted">
+            @if (seasonsLoading()) { Loading… }
+            @else { {{ seasons().length }} season{{ seasons().length === 1 ? '' : 's' }} }
+          </span>
+          @if (!showNewSeasonForm()) {
+            <button type="button" class="btn btn-primary" (click)="openNewSeasonForm()">＋ New season</button>
+          }
         </div>
+
+        @if (seasonsError(); as err) {
+          <p class="error">{{ err }}</p>
+        }
+
+        @if (showNewSeasonForm()) {
+          <div class="season-form">
+            <h3>New season</h3>
+            <p class="muted small">Creating a new season will end the currently-active season and enroll every existing player at 1000 MMR.</p>
+            <div class="form-row">
+              <label>
+                <span>Name</span>
+                <input type="text" [ngModel]="newSeasonDraft().name"
+                       (ngModelChange)="updateNewDraft('name', $event)"
+                       placeholder="Season 2026.2" />
+              </label>
+              <label>
+                <span>Starts</span>
+                <input type="date" [ngModel]="newSeasonDraft().startsAt"
+                       (ngModelChange)="updateNewDraft('startsAt', $event)" />
+              </label>
+              <label>
+                <span>Ends</span>
+                <input type="date" [ngModel]="newSeasonDraft().endsAt"
+                       (ngModelChange)="updateNewDraft('endsAt', $event)" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-ghost" (click)="cancelNewSeason()" [disabled]="creatingSeason()">Cancel</button>
+              <button type="button" class="btn btn-primary" (click)="saveNewSeason()" [disabled]="creatingSeason()">
+                {{ creatingSeason() ? 'Creating…' : 'Create season' }}
+              </button>
+            </div>
+          </div>
+        }
+
         <table class="admin-table">
           <thead>
             <tr>
@@ -55,23 +97,55 @@
           </thead>
           <tbody>
             @for (s of seasons(); track s.id) {
-              <tr>
-                <td>{{ s.name }}</td>
-                <td>
-                  @if (s.isActive) { <span class="badge active">Active</span> }
-                  @else { <span class="badge ended">Ended</span> }
-                </td>
-                <td>{{ formatDate(s.startsAt) }}</td>
-                <td>{{ formatDate(s.endsAt) }}</td>
-                <td class="num">{{ s.playerCount }}</td>
-                <td class="num">{{ s.matchCount }}</td>
-                <td class="row-actions">
-                  @if (s.isActive) {
-                    <button type="button" class="btn btn-ghost" (click)="endSeason(s)">End</button>
-                  }
-                  <button type="button" class="btn btn-ghost">Edit</button>
-                </td>
-              </tr>
+              @if (editingSeasonId() === s.id) {
+                <tr class="editing-row">
+                  <td>
+                    <input type="text" class="inline-input" [ngModel]="editDraft().name"
+                           (ngModelChange)="updateEditDraft('name', $event)" />
+                  </td>
+                  <td>
+                    @if (s.isActive) { <span class="badge active">Active</span> }
+                    @else { <span class="badge ended">Ended</span> }
+                  </td>
+                  <td>
+                    <input type="date" class="inline-input" [ngModel]="editDraft().startsAt"
+                           (ngModelChange)="updateEditDraft('startsAt', $event)" />
+                  </td>
+                  <td>
+                    <input type="date" class="inline-input" [ngModel]="editDraft().endsAt"
+                           (ngModelChange)="updateEditDraft('endsAt', $event)" />
+                  </td>
+                  <td class="num">{{ s.playerCount }}</td>
+                  <td class="num">{{ s.matchCount }}</td>
+                  <td class="row-actions">
+                    <button type="button" class="btn btn-ghost" (click)="cancelEditSeason()" [disabled]="savingSeason()">Cancel</button>
+                    <button type="button" class="btn btn-primary" (click)="saveEditSeason(s)" [disabled]="savingSeason()">
+                      {{ savingSeason() ? 'Saving…' : 'Save' }}
+                    </button>
+                  </td>
+                </tr>
+              } @else {
+                <tr>
+                  <td>{{ s.name }}</td>
+                  <td>
+                    @if (s.isActive) { <span class="badge active">Active</span> }
+                    @else { <span class="badge ended">Ended</span> }
+                  </td>
+                  <td>{{ formatDate(s.startsAt) }}</td>
+                  <td>{{ formatDate(s.endsAt) }}</td>
+                  <td class="num">{{ s.playerCount }}</td>
+                  <td class="num">{{ s.matchCount }}</td>
+                  <td class="row-actions">
+                    @if (s.isActive) {
+                      <button type="button" class="btn btn-ghost danger" (click)="endSeason(s)">End</button>
+                    }
+                    <button type="button" class="btn btn-ghost" (click)="startEditSeason(s)">Edit</button>
+                  </td>
+                </tr>
+              }
+            }
+            @if (!seasonsLoading() && seasons().length === 0) {
+              <tr><td colspan="7" class="empty">No seasons yet. Create one to get started.</td></tr>
             }
           </tbody>
         </table>
@@ -83,9 +157,6 @@
             @if (usersLoading()) { Loading… }
             @else { {{ users().length }} registered users }
           </span>
-          <button type="button" class="btn btn-ghost" (click)="loadUsers()" [disabled]="usersLoading()">
-            Refresh
-          </button>
         </div>
         @if (usersError(); as err) {
           <p class="error">{{ err }}</p>

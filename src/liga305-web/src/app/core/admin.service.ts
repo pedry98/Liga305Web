@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { Season } from '../models/season';
 
 export interface AdminUser {
   id: string;
@@ -45,6 +46,28 @@ export class AdminService {
         null,
         { withCredentials: true }
       )
+    );
+  }
+
+  createSeason(req: { name: string; startsAt: string; endsAt: string; makeActive?: boolean; startingMmr?: number }): Promise<Season> {
+    return firstValueFrom(
+      this.http.post<Season>(`${this.api}/admin/seasons`, req, { withCredentials: true })
+    );
+  }
+
+  endSeason(seasonId: string): Promise<{ id: string; isActive: false; endsAt: string }> {
+    return firstValueFrom(
+      this.http.post<{ id: string; isActive: false; endsAt: string }>(
+        `${this.api}/admin/seasons/${seasonId}/end`,
+        null,
+        { withCredentials: true }
+      )
+    );
+  }
+
+  updateSeason(seasonId: string, req: { name?: string; startsAt?: string; endsAt?: string }): Promise<Season> {
+    return firstValueFrom(
+      this.http.patch<Season>(`${this.api}/admin/seasons/${seasonId}`, req, { withCredentials: true })
     );
   }
 

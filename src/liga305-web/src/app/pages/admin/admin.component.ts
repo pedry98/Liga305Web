@@ -1,18 +1,25 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, HostListener, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminService, AdminUser } from '../../core/admin.service';
 import { AuthService } from '../../core/auth.service';
-import { MOCK_ALL_SEASONS } from '../../core/admin-mock';
+import { SeasonService } from '../../core/season.service';
 import { MatchService } from '../../core/match.service';
 import { Season } from '../../models/season';
 import { MatchSummary } from '../../models/match';
 
 type Tab = 'seasons' | 'users' | 'matches';
 
+interface SeasonDraft {
+  name: string;
+  startsAt: string; // yyyy-MM-dd (input[type=date] value)
+  endsAt: string;
+}
+
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, FormsModule],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.scss'
 })
@@ -20,14 +27,27 @@ export class AdminComponent {
   private readonly auth = inject(AuthService);
   private readonly matches = inject(MatchService);
   private readonly adminSvc = inject(AdminService);
+  private readonly seasonSvc = inject(SeasonService);
 
   readonly user = this.auth.user;
   readonly isReady = this.auth.isReady;
   readonly tab = signal<Tab>('seasons');
   readonly preview = signal(false);
 
-  // Seasons still mocked — admin season-management isn't backed yet (Phase 6).
-  readonly seasons = signal<Season[]>(MOCK_ALL_SEASONS);
+  readonly seasons = signal<Season[]>([]);
+  readonly seasonsLoading = signal(false);
+  readonly seasonsError = signal<string | null>(null);
+
+  // New-season form state
+  readonly showNewSeasonForm = signal(false);
+  readonly newSeasonDraft = signal<SeasonDraft>(this.blankDraft());
+  readonly creatingSeason = signal(false);
+
+  // Inline-edit state — only one row at a time
+  readonly editingSeasonId = signal<string | null>(null);
+  readonly editDraft = signal<SeasonDraft>(this.blankDraft());
+  readonly savingSeason = signal(false);
+
   readonly users = signal<AdminUser[]>([]);
   readonly usersLoading = signal(false);
   readonly usersError = signal<string | null>(null);
@@ -43,26 +63,151 @@ export class AdminComponent {
   constructor() {
     this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
 
-    // Refresh users when (a) the gate opens or (b) the user clicks the Users tab.
+    // Load whatever the active tab needs whenever (a) the gate opens or (b) the tab changes.
     effect(() => {
-      if (this.canSee() && this.tab() === 'users') this.loadUsers();
+      if (!this.canSee()) return;
+      const t = this.tab();
+      if (t === 'users') this.loadUsers();
+      else if (t === 'seasons') this.loadSeasons();
+      else if (t === 'matches') this.loadMatches();
     });
   }
 
-  setTab(t: Tab) { this.tab.set(t); }
+  // Refresh the current tab whenever the window regains focus — keeps user list,
+  // season list, and live matches honest without a manual refresh button.
+  @HostListener('window:focus')
+  onWindowFocus() {
+    if (!this.canSee()) return;
+    const t = this.tab();
+    if (t === 'users') this.loadUsers();
+    else if (t === 'seasons') this.loadSeasons();
+    else if (t === 'matches') this.loadMatches();
+  }
+
+  setTab(t: Tab) {
+    if (this.tab() === t) {
+      // Re-clicking the active tab acts as a manual refresh.
+      if (t === 'users') this.loadUsers();
+      else if (t === 'seasons') this.loadSeasons();
+      else if (t === 'matches') this.loadMatches();
+      return;
+    }
+    this.tab.set(t);
+  }
+
+  // ----- Seasons -----
+
+  loadSeasons() {
+    if (this.seasonsLoading()) return;
+    this.seasonsLoading.set(true);
+    this.seasonsError.set(null);
+    this.seasonSvc.getAllSeasons().subscribe({
+      next: rows => { this.seasons.set(rows); this.seasonsLoading.set(false); },
+      error: e => {
+        this.seasonsError.set(e?.error?.error ?? 'Could not load seasons.');
+        this.seasonsLoading.set(false);
+      }
+    });
+  }
+
+  loadMatches() {
+    this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
+  }
+
+  openNewSeasonForm() {
+    this.newSeasonDraft.set(this.suggestNextSeasonDraft());
+    this.showNewSeasonForm.set(true);
+  }
+
+  cancelNewSeason() {
+    this.showNewSeasonForm.set(false);
+  }
+
+  async saveNewSeason() {
+    const d = this.newSeasonDraft();
+    if (!d.name.trim()) { alert('Season name is required.'); return; }
+    if (!d.startsAt || !d.endsAt) { alert('Start and end dates are required.'); return; }
+    if (new Date(d.endsAt) <= new Date(d.startsAt)) { alert('End date must be after start date.'); return; }
+    if (!confirm(`Create season "${d.name}" and make it active? Any current active season will be ended.`)) return;
+
+    this.creatingSeason.set(true);
+    try {
+      await this.adminSvc.createSeason({
+        name: d.name.trim(),
+        startsAt: new Date(d.startsAt + 'T00:00:00Z').toISOString(),
+        endsAt: new Date(d.endsAt + 'T23:59:59Z').toISOString(),
+        makeActive: true
+      });
+      this.showNewSeasonForm.set(false);
+      this.loadSeasons();
+    } catch (e: any) {
+      alert(e?.error?.error ?? 'Could not create season.');
+    } finally {
+      this.creatingSeason.set(false);
+    }
+  }
+
+  startEditSeason(s: Season) {
+    this.editingSeasonId.set(s.id);
+    this.editDraft.set({
+      name: s.name,
+      startsAt: this.toDateInput(s.startsAt),
+      endsAt: this.toDateInput(s.endsAt)
+    });
+  }
+
+  cancelEditSeason() {
+    this.editingSeasonId.set(null);
+  }
+
+  async saveEditSeason(s: Season) {
+    const d = this.editDraft();
+    if (!d.name.trim()) { alert('Season name is required.'); return; }
+    if (new Date(d.endsAt) <= new Date(d.startsAt)) { alert('End date must be after start date.'); return; }
+
+    this.savingSeason.set(true);
+    try {
+      await this.adminSvc.updateSeason(s.id, {
+        name: d.name.trim(),
+        startsAt: new Date(d.startsAt + 'T00:00:00Z').toISOString(),
+        endsAt: new Date(d.endsAt + 'T23:59:59Z').toISOString()
+      });
+      this.editingSeasonId.set(null);
+      this.loadSeasons();
+    } catch (e: any) {
+      alert(e?.error?.error ?? 'Could not save season.');
+    } finally {
+      this.savingSeason.set(false);
+    }
+  }
+
+  async endSeason(s: Season) {
+    if (!confirm(`End "${s.name}"? Players will need a new season to keep playing ranked.`)) return;
+    try {
+      await this.adminSvc.endSeason(s.id);
+      this.loadSeasons();
+    } catch (e: any) {
+      alert(e?.error?.error ?? 'Could not end season.');
+    }
+  }
+
+  // ----- League reset -----
 
   async resetLeague() {
     if (!confirm('Reset the league?\n\nThis will:\n• delete every match and its history\n• remove all TestBot accounts\n• reset every real player to 1000 MMR with 0 wins/losses\n\nThere is no undo.')) return;
-    if (!confirm('Are you absolutely sure? Type-in nothing — this is the second confirm.')) return;
+    if (!confirm('Are you absolutely sure? This is the second confirm.')) return;
     try {
       const r = await this.adminSvc.resetLeague();
       alert(`League reset.\n\n${r.matchesDeleted} matches deleted, ${r.botUsersRemoved} bot users removed, ${r.realUsersReset} real users reset to ${r.startingMmr} MMR.`);
       this.loadUsers();
-      this.matches.getRecent().subscribe(rows => this.activeMatches.set(rows));
+      this.loadSeasons();
+      this.loadMatches();
     } catch (e: any) {
       alert(e?.error?.error ?? 'Reset failed');
     }
   }
+
+  // ----- Users -----
 
   async loadUsers() {
     if (this.usersLoading()) return;
@@ -72,7 +217,6 @@ export class AdminComponent {
       const list = await this.adminSvc.listUsers();
       this.users.set(list);
     } catch (e: any) {
-      // 403 = preview mode (not actually admin) — show empty + a hint, no alert.
       if (e?.status === 403) {
         this.usersError.set('Preview mode: sign in as admin to load real users.');
       } else {
@@ -107,11 +251,6 @@ export class AdminComponent {
     }
   }
 
-  endSeason(season: Season) {
-    // Local-only stub for now; real season-end endpoint comes with Phase 6.
-    this.seasons.set(this.seasons().map(s => s.id === season.id ? { ...s, isActive: false } : s));
-  }
-
   async cancelMatch(m: MatchSummary) {
     if (!confirm(`Force-cancel match #${m.id.slice(0, 8)} and destroy the Dota lobby?`)) return;
     try {
@@ -124,5 +263,39 @@ export class AdminComponent {
 
   formatDate(iso: string): string {
     return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // ----- helpers -----
+
+  updateNewDraft(field: keyof SeasonDraft, value: string) {
+    this.newSeasonDraft.set({ ...this.newSeasonDraft(), [field]: value });
+  }
+
+  updateEditDraft(field: keyof SeasonDraft, value: string) {
+    this.editDraft.set({ ...this.editDraft(), [field]: value });
+  }
+
+  private blankDraft(): SeasonDraft {
+    return { name: '', startsAt: '', endsAt: '' };
+  }
+
+  private toDateInput(iso: string): string {
+    const d = new Date(iso);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private suggestNextSeasonDraft(): SeasonDraft {
+    const now = new Date();
+    const start = now;
+    const end = new Date(now.getTime());
+    end.setMonth(end.getMonth() + 3);
+    return {
+      name: `Season ${now.getUTCFullYear()}.${Math.floor(now.getUTCMonth() / 3) + 1}`,
+      startsAt: this.toDateInput(start.toISOString()),
+      endsAt: this.toDateInput(end.toISOString())
+    };
   }
 }
