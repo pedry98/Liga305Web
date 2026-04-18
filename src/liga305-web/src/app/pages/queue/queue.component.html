@@ -19,7 +19,9 @@
     </div>
 
     <p class="status-text">
-      @if (s.size >= s.capacity) {
+      @if (s.selfActiveMatchId) {
+        You're already in a match — finish it before queueing again.
+      } @else if (s.size >= s.capacity) {
         Queue popped — match starting
       } @else if (s.selfInQueue) {
         You're in the queue. Waiting for {{ s.capacity - s.size }} more.
@@ -31,6 +33,8 @@
     <div class="actions">
       @if (!u) {
         <a [href]="steamLoginUrl" class="btn btn-primary">Sign in to join</a>
+      } @else if (s.selfActiveMatchId) {
+        <a [routerLink]="['/matches', s.selfActiveMatchId]" class="btn btn-primary">Go to your match →</a>
       } @else if (s.selfInQueue) {
         <button type="button" class="btn btn-danger" [disabled]="busy()" (click)="leave()">
           Leave queue

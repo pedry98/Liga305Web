@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AdminService } from '../../core/admin.service';
 import { AuthService } from '../../core/auth.service';
 import { QueueService } from '../../core/queue.service';
@@ -7,6 +7,7 @@ import { QueueService } from '../../core/queue.service';
 @Component({
   selector: 'app-queue',
   standalone: true,
+  imports: [RouterLink],
   templateUrl: './queue.component.html',
   styleUrl: './queue.component.scss'
 })
@@ -62,6 +63,15 @@ export class QueueComponent {
         if (s.size === 0 && s.lastMatchId) {
           this.router.navigate(['/matches', s.lastMatchId]);
         }
+      },
+      error: e => {
+        if (e?.status === 409 && e?.error?.error === 'already_in_match') {
+          alert("You're already in a match — finish it before queueing again.");
+          this.queue.load().subscribe();
+        } else {
+          alert(e?.error?.error ?? 'Could not join queue.');
+        }
+        this.busy.set(false);
       },
       complete: () => this.busy.set(false)
     });

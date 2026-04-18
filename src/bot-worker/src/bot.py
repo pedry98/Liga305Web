@@ -25,6 +25,14 @@ from steam.guard import SteamAuthenticator
 # DOTALobbyVisibility enum values (avoid importing — name varies across lib versions).
 LOBBY_VISIBILITY_PUBLIC = 0  # also: Friends=1, Unlisted=2
 
+# Team enum integer constants — DOTA_GC_TEAM doesn't always expose these as
+# importable attributes across library versions, so we keep the raw values too.
+TEAM_GOOD_GUYS = int(DOTA_GC_TEAM.GOOD_GUYS)
+TEAM_BAD_GUYS = int(DOTA_GC_TEAM.BAD_GUYS)
+TEAM_BROADCASTER = 2
+TEAM_SPECTATOR = 3
+TEAM_PLAYER_POOL = 4
+
 log = logging.getLogger("bot")
 
 # Steam offset for converting SteamID64 ↔ AccountID32.
@@ -210,9 +218,12 @@ class DotaBot:
                         "visibility": LOBBY_VISIBILITY_PUBLIC,
                     },
                 )
-                # Move bot to broadcast channel — doesn't occupy a team slot.
-                gevent.sleep(0.5)
-                self._dota.join_practice_lobby_broadcast_channel(1)
+                # The GC parks the lobby creator on Radiant slot 0 by default.
+                # Move the bot OUT of the team into the broadcaster channel so it
+                # doesn't occupy a player slot. If the GC is slow, the per-event
+                # handler will re-issue the move on the next lobby_changed.
+                gevent.sleep(1.0)
+                self._move_bot_off_team()
 
                 with self._lock:
                     am = ActiveMatch(match_id=match_id, players=players, password="")
@@ -300,6 +311,31 @@ class DotaBot:
         gevent.spawn(do_invites)
         return len(am.players)
 
+    def _move_bot_off_team(self) -> None:
+        """Park the bot in the broadcaster channel so it never holds a Radiant/Dire slot.
+
+        The GC drops the lobby creator into Radiant slot 0 on creation. We can't
+        ask the GC to "leave team", but we can:
+          1. Move ourselves into the player pool (no team) via join_practice_lobby_team
+             with team=PLAYER_POOL — clears the Radiant slot.
+          2. Then join the broadcaster channel so we still appear in the lobby
+             (clients show us above the Radiant team).
+        """
+        if not self._dota:
+            return
+        try:
+            # Step 1: clear our team slot. Some library versions only accept
+            # the GOOD_GUYS/BAD_GUYS values for team, so wrap each call.
+            try:
+                self._dota.join_practice_lobby_team(slot=1, team=TEAM_PLAYER_POOL)
+            except Exception:
+                log.exception("join_practice_lobby_team(PLAYER_POOL) failed; trying broadcast directly")
+            gevent.sleep(0.3)
+            # Step 2: actually become a broadcaster so we still see lobby state.
+            self._dota.join_practice_lobby_broadcast_channel(1)
+        except Exception:
+            log.exception("_move_bot_off_team failed")
+
     # ---------- lobby event handlers (FACEIT-style enforcement) ----------
 
     def _on_lobby_event(self, lobby) -> None:
@@ -318,6 +354,16 @@ class DotaBot:
         bot_steam_id = int(self._steam.steam_id) if self._steam and self._steam.steam_id else 0
         roster_steam_ids = {int(p.steam_id_64) for p in am.players}
         expected_team_by_steam_id: dict[int, int] = {int(p.steam_id_64): p.expected_team for p in am.players}
+
+        # 0. If the bot is sitting in a player team slot (Radiant/Dire), evict
+        #    itself to broadcaster so it doesn't take up a roster spot.
+        for m in members:
+            if int(getattr(m, "id", 0) or 0) == bot_steam_id:
+                bot_team = int(getattr(m, "team", -1))
+                if bot_team in (TEAM_GOOD_GUYS, TEAM_BAD_GUYS):
+                    log.info("bot is on team=%d (player slot) — moving to broadcaster", bot_team)
+                    gevent.spawn(self._move_bot_off_team)
+                break
 
         # 1. Kick anyone not on the roster (ignoring the bot itself).
         for m in members:

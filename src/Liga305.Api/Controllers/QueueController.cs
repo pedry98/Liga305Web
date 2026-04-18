@@ -49,6 +49,22 @@ public class QueueController(
             .Select(m => (Guid?)m.Id)
             .FirstOrDefaultAsync();
 
+        // If the caller is currently tied up in a match (drafting/lobby/live),
+        // surface its id so the SPA can disable Join and offer a "Go to match" link.
+        Guid? selfActiveMatchId = null;
+        if (me is not null)
+        {
+            selfActiveMatchId = await db.MatchPlayers
+                .Where(mp => mp.UserId == me.Id
+                          && (mp.Match.Status == MatchStatus.Drafting
+                           || mp.Match.Status == MatchStatus.Draft
+                           || mp.Match.Status == MatchStatus.Lobby
+                           || mp.Match.Status == MatchStatus.Live))
+                .OrderByDescending(mp => mp.Match.CreatedAt)
+                .Select(mp => (Guid?)mp.MatchId)
+                .FirstOrDefaultAsync();
+        }
+
         return Ok(new QueueStateDto(
             season.Id,
             queued.Count,
@@ -56,7 +72,8 @@ public class QueueController(
             selfInQueue,
             lastMatchId,
             queued.Select(q => new QueueEntryDto(
-                q.UserId, q.DisplayName, q.AvatarUrl, (int)Math.Round(q.Mmr), q.EnqueuedAt)).ToList()));
+                q.UserId, q.DisplayName, q.AvatarUrl, (int)Math.Round(q.Mmr), q.EnqueuedAt)).ToList(),
+            selfActiveMatchId));
     }
 
     [HttpPost("join")]
@@ -69,6 +86,17 @@ public class QueueController(
 
         var season = await db.Seasons.FirstOrDefaultAsync(s => s.IsActive);
         if (season is null) return Conflict(new { error = "no_active_season" });
+
+        // Block re-queueing while still tied up in a match (drafting, in lobby,
+        // or actively playing). Once the match is Completed or Abandoned the
+        // player is free to queue again.
+        var inMatch = await db.MatchPlayers
+            .AnyAsync(mp => mp.UserId == me.Id
+                          && (mp.Match.Status == MatchStatus.Drafting
+                           || mp.Match.Status == MatchStatus.Draft
+                           || mp.Match.Status == MatchStatus.Lobby
+                           || mp.Match.Status == MatchStatus.Live));
+        if (inMatch) return Conflict(new { error = "already_in_match" });
 
         var alreadyQueued = await db.QueueEntries
             .AnyAsync(q => q.SeasonId == season.Id && q.UserId == me.Id && q.Status == QueueStatus.Queued);

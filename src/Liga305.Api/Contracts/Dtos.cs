@@ -34,7 +34,8 @@ public record QueueStateDto(
     int Capacity,
     bool SelfInQueue,
     Guid? LastMatchId,
-    IReadOnlyList<QueueEntryDto> Entries);
+    IReadOnlyList<QueueEntryDto> Entries,
+    Guid? SelfActiveMatchId = null);
 
 public record MatchSummaryDto(
     Guid Id,

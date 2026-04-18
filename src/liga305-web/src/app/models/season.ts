@@ -28,6 +28,7 @@ export interface QueueState {
   entries: QueueEntry[];
   selfInQueue: boolean;
   lastMatchId?: string | null;
+  selfActiveMatchId?: string | null;
 }
 
 export interface QueueEntry {
