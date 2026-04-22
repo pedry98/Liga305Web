@@ -1,7 +1,7 @@
 import { Component, computed, effect, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { AdminService, AdminUser } from '../../core/admin.service';
+import { AdminService, AdminUser, OpenDotaProbeResult } from '../../core/admin.service';
 import { AuthService } from '../../core/auth.service';
 import { SeasonService } from '../../core/season.service';
 import { MatchService } from '../../core/match.service';
@@ -52,6 +52,12 @@ export class AdminComponent {
   readonly usersLoading = signal(false);
   readonly usersError = signal<string | null>(null);
   readonly activeMatches = signal<MatchSummary[]>([]);
+
+  // OpenDota stats probe — check whether a Dota match ID would settle via the poller.
+  readonly probeInput = signal('');
+  readonly probing = signal(false);
+  readonly probeResult = signal<OpenDotaProbeResult | null>(null);
+  readonly probeError = signal<string | null>(null);
 
   readonly canSee = computed(() => {
     const u = this.user();
@@ -250,6 +256,38 @@ export class AdminComponent {
     } catch (e: any) {
       alert(e?.error?.error ?? 'Toggle failed');
     }
+  }
+
+  async probeOpenDota() {
+    const raw = this.probeInput().trim();
+    if (!raw) { this.probeError.set('Enter a Dota match ID.'); return; }
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) {
+      this.probeError.set('Match ID must be a positive integer (e.g. 7654321098).');
+      return;
+    }
+
+    this.probing.set(true);
+    this.probeError.set(null);
+    this.probeResult.set(null);
+    try {
+      const r = await this.adminSvc.probeOpenDotaMatch(id);
+      this.probeResult.set(r);
+    } catch (e: any) {
+      if (e?.status === 403) {
+        this.probeError.set('Preview mode: sign in as admin to probe OpenDota.');
+      } else {
+        this.probeError.set(e?.error?.error ?? 'OpenDota probe failed.');
+      }
+    } finally {
+      this.probing.set(false);
+    }
+  }
+
+  clearProbe() {
+    this.probeInput.set('');
+    this.probeResult.set(null);
+    this.probeError.set(null);
   }
 
   async cancelMatch(m: MatchSummary) {

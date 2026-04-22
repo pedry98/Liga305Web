@@ -221,6 +221,84 @@
       }
 
       @case ('matches') {
+        <div class="probe-panel">
+          <div class="probe-head">
+            <div>
+              <h3>OpenDota stats probe</h3>
+              <p class="muted small">Paste a Dota 2 match ID to check whether OpenDota has the stats yet. Read-only — this does not change any match.</p>
+            </div>
+          </div>
+          <div class="probe-row">
+            <input type="text" inputmode="numeric" placeholder="e.g. 7654321098"
+                   [ngModel]="probeInput()"
+                   (ngModelChange)="probeInput.set($event)"
+                   (keyup.enter)="probeOpenDota()" />
+            <button type="button" class="btn btn-primary" (click)="probeOpenDota()" [disabled]="probing()">
+              {{ probing() ? 'Checking…' : 'Check OpenDota' }}
+            </button>
+            @if (probeResult() || probeError()) {
+              <button type="button" class="btn btn-ghost" (click)="clearProbe()" [disabled]="probing()">Clear</button>
+            }
+          </div>
+
+          @if (probeError(); as err) {
+            <p class="error">{{ err }}</p>
+          }
+
+          @if (probeResult(); as r) {
+            @if (r.found) {
+              <div class="probe-result ok">
+                <div class="probe-summary">
+                  <span class="badge ok">Stats available</span>
+                  <span class="mono">#{{ r.dotaMatchId }}</span>
+                  <span class="muted small">·</span>
+                  <span>{{ r.radiantWin ? 'Radiant win' : 'Dire win' }}</span>
+                  <span class="muted small">·</span>
+                  <span>{{ r.durationSec }}s duration</span>
+                  <span class="muted small">·</span>
+                  <span>{{ r.playerCount }} players</span>
+                  <span class="muted small">·</span>
+                  <span [class.muted]="!r.parsed">{{ r.parsed ? 'Parsed' : 'Not yet parsed' }}</span>
+                </div>
+                @if (r.players && r.players.length) {
+                  <table class="admin-table probe-table">
+                    <thead>
+                      <tr>
+                        <th>Side</th>
+                        <th>Account ID</th>
+                        <th class="num">K</th>
+                        <th class="num">D</th>
+                        <th class="num">A</th>
+                        <th>Abandoned?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (p of r.players; track p.playerSlot) {
+                        <tr>
+                          <td>
+                            @if (p.isRadiant) { <span class="badge ok">Radiant</span> }
+                            @else { <span class="badge banned">Dire</span> }
+                          </td>
+                          <td class="mono">{{ p.accountId || '—' }}</td>
+                          <td class="num">{{ p.kills }}</td>
+                          <td class="num">{{ p.deaths }}</td>
+                          <td class="num">{{ p.assists }}</td>
+                          <td>{{ p.abandoned ? 'Yes' : 'No' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+              </div>
+            } @else {
+              <div class="probe-result miss">
+                <span class="badge banned">Not available</span>
+                <p class="muted small">{{ r.message }}</p>
+              </div>
+            }
+          }
+        </div>
+
         <div class="section-actions">
           <span class="muted">Non-completed matches are listed first</span>
         </div>

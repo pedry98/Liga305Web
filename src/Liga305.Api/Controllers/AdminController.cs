@@ -2,6 +2,7 @@ using Liga305.Api.Auth;
 using Liga305.Domain.Entities;
 using Liga305.Infrastructure.BotWorker;
 using Liga305.Infrastructure.Matches;
+using Liga305.Infrastructure.OpenDota;
 using Liga305.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ public class AdminController(
     CurrentUserAccessor currentUser,
     MatchSettlementService settlement,
     BotWorkerClient bot,
+    OpenDotaClient openDota,
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
@@ -395,6 +397,53 @@ public class AdminController(
     }
 
     public record SetDotaMatchIdRequest(long DotaMatchId);
+
+    /// <summary>
+    /// Probe OpenDota for a given Dota match ID to confirm the stats poller would
+    /// be able to settle from it. Admin-only diagnostic — read-only, touches
+    /// nothing in our DB. Returns either a lightweight preview of the match (K/D/A
+    /// per player, duration, radiant_win, parsed flag) or a reason it couldn't be
+    /// pulled.
+    /// </summary>
+    [HttpGet("opendota/match/{dotaMatchId:long}")]
+    public async Task<IActionResult> ProbeOpenDotaMatch(long dotaMatchId, CancellationToken ct)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+        if (dotaMatchId <= 0) return BadRequest(new { error = "invalid_match_id" });
+
+        var match = await openDota.GetMatchAsync(dotaMatchId, ct);
+        if (match is null)
+        {
+            return Ok(new
+            {
+                found = false,
+                dotaMatchId,
+                message = "OpenDota returned no usable data. The match may not be indexed yet (fresh matches can take a few minutes), the ID may be wrong, or the profile may be private."
+            });
+        }
+
+        return Ok(new
+        {
+            found = true,
+            dotaMatchId = match.MatchId,
+            radiantWin = match.RadiantWin,
+            durationSec = match.DurationSec,
+            startedAt = match.StartedAt,
+            parsed = match.Parsed,
+            playerCount = match.Players.Count,
+            players = match.Players.Select(p => new
+            {
+                accountId = p.AccountId,
+                isRadiant = p.IsRadiant,
+                playerSlot = p.PlayerSlot,
+                kills = p.Kills,
+                deaths = p.Deaths,
+                assists = p.Assists,
+                abandoned = p.Abandoned
+            })
+        });
+    }
 
     /// <summary>
     /// Dev/test helper: ensure the active season's queue has at least <paramref name="targetSize"/>

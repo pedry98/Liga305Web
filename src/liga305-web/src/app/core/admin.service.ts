@@ -140,4 +140,35 @@ export class AdminService {
       )
     );
   }
+
+  probeOpenDotaMatch(dotaMatchId: number): Promise<OpenDotaProbeResult> {
+    return firstValueFrom(
+      this.http.get<OpenDotaProbeResult>(
+        `${this.api}/admin/opendota/match/${dotaMatchId}`,
+        { withCredentials: true }
+      )
+    );
+  }
+}
+
+export interface OpenDotaProbePlayer {
+  accountId: number;
+  isRadiant: boolean;
+  playerSlot: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  abandoned: boolean;
+}
+
+export interface OpenDotaProbeResult {
+  found: boolean;
+  dotaMatchId: number;
+  message?: string;
+  radiantWin?: boolean;
+  durationSec?: number;
+  startedAt?: string | null;
+  parsed?: boolean;
+  playerCount?: number;
+  players?: OpenDotaProbePlayer[];
 }
