@@ -58,6 +58,8 @@ export class AdminComponent {
   readonly probing = signal(false);
   readonly probeResult = signal<OpenDotaProbeResult | null>(null);
   readonly probeError = signal<string | null>(null);
+  readonly importing = signal(false);
+  readonly importMessage = signal<string | null>(null);
 
   readonly canSee = computed(() => {
     const u = this.user();
@@ -270,6 +272,7 @@ export class AdminComponent {
     this.probing.set(true);
     this.probeError.set(null);
     this.probeResult.set(null);
+    this.importMessage.set(null);
     try {
       const r = await this.adminSvc.probeOpenDotaMatch(id);
       this.probeResult.set(r);
@@ -284,10 +287,43 @@ export class AdminComponent {
     }
   }
 
+  async importProbedMatch() {
+    const r = this.probeResult();
+    if (!r || !r.found || !r.importable) return;
+    const label = `match ${r.dotaMatchId} (${r.radiantWin ? 'Radiant win' : 'Dire win'}, ${r.durationSec}s)`;
+    if (!confirm(`Register ${label} into season "${r.activeSeasonName}"?\n\nThis will create the match, record K/D/A, update W/L, and recalculate MMR for all 10 players. This cannot be undone without a league reset.`)) return;
+
+    this.importing.set(true);
+    this.importMessage.set(null);
+    this.probeError.set(null);
+    try {
+      const res = await this.adminSvc.importMatchFromOpenDota(r.dotaMatchId);
+      this.importMessage.set(`Imported — match ${res.matchId.slice(0, 8)} registered in "${res.seasonName}". ${res.radiantWin ? 'Radiant' : 'Dire'} won (${res.durationSec}s).`);
+      // Re-probe so the result now shows "already imported" if they re-check.
+      await this.probeOpenDota();
+      // Refresh the matches list so the new row appears below.
+      this.loadMatches();
+    } catch (e: any) {
+      const code = e?.error?.error;
+      const pretty: Record<string, string> = {
+        already_imported: 'This Dota match ID has already been imported.',
+        no_active_season: 'There is no active season to import into.',
+        opendota_not_ready: 'OpenDota doesn\'t have the stats yet. Try again in a few minutes.',
+        wrong_player_count: 'Match does not have 10 players.',
+        players_not_registered: 'Some players are not registered in the league.',
+        not_five_v_five: 'Teams are not balanced 5v5.',
+      };
+      this.probeError.set(pretty[code] ?? e?.error?.error ?? 'Import failed.');
+    } finally {
+      this.importing.set(false);
+    }
+  }
+
   clearProbe() {
     this.probeInput.set('');
     this.probeResult.set(null);
     this.probeError.set(null);
+    this.importMessage.set(null);
   }
 
   async cancelMatch(m: MatchSummary) {

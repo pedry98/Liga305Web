@@ -149,16 +149,31 @@ export class AdminService {
       )
     );
   }
+
+  importMatchFromOpenDota(dotaMatchId: number): Promise<ImportMatchResult> {
+    return firstValueFrom(
+      this.http.post<ImportMatchResult>(
+        `${this.api}/admin/matches/import-from-opendota`,
+        { dotaMatchId },
+        { withCredentials: true }
+      )
+    );
+  }
 }
 
 export interface OpenDotaProbePlayer {
   accountId: number;
+  steamId64: string | null;
   isRadiant: boolean;
   playerSlot: number;
   kills: number;
   deaths: number;
   assists: number;
   abandoned: boolean;
+  leagueUserId: string | null;
+  leagueDisplayName: string | null;
+  seasonMmr: number | null;
+  matched: boolean;
 }
 
 export interface OpenDotaProbeResult {
@@ -170,5 +185,21 @@ export interface OpenDotaProbeResult {
   startedAt?: string | null;
   parsed?: boolean;
   playerCount?: number;
+  matchedCount?: number;
+  activeSeasonId?: string | null;
+  activeSeasonName?: string | null;
+  alreadyImported?: boolean;
+  importable?: boolean;
+  importBlockedReason?: string | null;
   players?: OpenDotaProbePlayer[];
+}
+
+export interface ImportMatchResult {
+  imported: boolean;
+  matchId: string;
+  dotaMatchId: number;
+  seasonId: string;
+  seasonName: string;
+  radiantWin: boolean;
+  durationSec: number;
 }

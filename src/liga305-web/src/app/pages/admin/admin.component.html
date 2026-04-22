@@ -245,6 +245,10 @@
             <p class="error">{{ err }}</p>
           }
 
+          @if (importMessage(); as msg) {
+            <p class="success">{{ msg }}</p>
+          }
+
           @if (probeResult(); as r) {
             @if (r.found) {
               <div class="probe-result ok">
@@ -259,12 +263,32 @@
                   <span>{{ r.playerCount }} players</span>
                   <span class="muted small">·</span>
                   <span [class.muted]="!r.parsed">{{ r.parsed ? 'Parsed' : 'Not yet parsed' }}</span>
+                  <span class="muted small">·</span>
+                  <span [class.muted]="(r.matchedCount ?? 0) < 10">{{ r.matchedCount ?? 0 }}/10 in league</span>
                 </div>
+
+                <div class="import-row">
+                  @if (r.importable) {
+                    <button type="button" class="btn btn-primary" (click)="importProbedMatch()" [disabled]="importing()">
+                      {{ importing() ? 'Registering…' : 'Register match in ' + (r.activeSeasonName ?? 'active season') }}
+                    </button>
+                    <span class="muted small">Creates the match, updates MMR, records W/L.</span>
+                  } @else if (r.alreadyImported) {
+                    <span class="badge ok">Already imported</span>
+                    <span class="muted small">This Dota match ID is already in the league.</span>
+                  } @else if (r.importBlockedReason) {
+                    <span class="badge banned">Can't import</span>
+                    <span class="muted small">{{ r.importBlockedReason }}</span>
+                  }
+                </div>
+
                 @if (r.players && r.players.length) {
                   <table class="admin-table probe-table">
                     <thead>
                       <tr>
                         <th>Side</th>
+                        <th>League user</th>
+                        <th class="num">MMR</th>
                         <th>Account ID</th>
                         <th class="num">K</th>
                         <th class="num">D</th>
@@ -274,11 +298,19 @@
                     </thead>
                     <tbody>
                       @for (p of r.players; track p.playerSlot) {
-                        <tr>
+                        <tr [class.unmatched-row]="!p.matched">
                           <td>
                             @if (p.isRadiant) { <span class="badge ok">Radiant</span> }
                             @else { <span class="badge banned">Dire</span> }
                           </td>
+                          <td>
+                            @if (p.matched) {
+                              {{ p.leagueDisplayName }}
+                            } @else {
+                              <span class="muted">Not in league</span>
+                            }
+                          </td>
+                          <td class="num">{{ p.seasonMmr ?? '—' }}</td>
                           <td class="mono">{{ p.accountId || '—' }}</td>
                           <td class="num">{{ p.kills }}</td>
                           <td class="num">{{ p.deaths }}</td>

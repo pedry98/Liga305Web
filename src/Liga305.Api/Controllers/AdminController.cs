@@ -399,11 +399,9 @@ public class AdminController(
     public record SetDotaMatchIdRequest(long DotaMatchId);
 
     /// <summary>
-    /// Probe OpenDota for a given Dota match ID to confirm the stats poller would
-    /// be able to settle from it. Admin-only diagnostic — read-only, touches
-    /// nothing in our DB. Returns either a lightweight preview of the match (K/D/A
-    /// per player, duration, radiant_win, parsed flag) or a reason it couldn't be
-    /// pulled.
+    /// Probe OpenDota for a given Dota match ID and return a preview plus enough
+    /// info to decide whether this match can be imported into the league as a
+    /// historical result. Read-only — touches nothing in our DB.
     /// </summary>
     [HttpGet("opendota/match/{dotaMatchId:long}")]
     public async Task<IActionResult> ProbeOpenDotaMatch(long dotaMatchId, CancellationToken ct)
@@ -423,6 +421,65 @@ public class AdminController(
             });
         }
 
+        // Resolve each OpenDota account_id back to a League user by Steam64, and
+        // attach that user's active-season MMR so the admin can see who would get
+        // updated if they imported this match.
+        var steamId64s = match.Players
+            .Where(p => p.AccountId > 0)
+            .Select(p => (p.AccountId + SteamIdBase).ToString())
+            .ToList();
+
+        var users = steamId64s.Count == 0
+            ? []
+            : await db.Users
+                .Where(u => steamId64s.Contains(u.SteamId64))
+                .Select(u => new { u.Id, u.SteamId64, u.DisplayName })
+                .ToListAsync(ct);
+        var usersBySteamId = users.ToDictionary(u => u.SteamId64);
+
+        var activeSeason = await db.Seasons.FirstOrDefaultAsync(s => s.IsActive, ct);
+        var userIds = users.Select(u => u.Id).ToList();
+        var seasonMmr = activeSeason is null || userIds.Count == 0
+            ? new Dictionary<Guid, double>()
+            : await db.SeasonPlayers
+                .Where(sp => sp.SeasonId == activeSeason.Id && userIds.Contains(sp.UserId))
+                .ToDictionaryAsync(sp => sp.UserId, sp => sp.Mmr, ct);
+
+        var alreadyImported = await db.Matches.AnyAsync(m => m.DotaMatchId == dotaMatchId, ct);
+
+        var playersView = match.Players.Select(p =>
+        {
+            var steamId64 = p.AccountId > 0 ? (p.AccountId + SteamIdBase).ToString() : null;
+            var resolved = steamId64 is not null && usersBySteamId.TryGetValue(steamId64, out var u) ? u : null;
+            int? mmr = resolved is not null && seasonMmr.TryGetValue(resolved.Id, out var m) ? (int)Math.Round(m) : null;
+            return new
+            {
+                accountId = p.AccountId,
+                steamId64,
+                isRadiant = p.IsRadiant,
+                playerSlot = p.PlayerSlot,
+                kills = p.Kills,
+                deaths = p.Deaths,
+                assists = p.Assists,
+                abandoned = p.Abandoned,
+                leagueUserId = resolved?.Id,
+                leagueDisplayName = resolved?.DisplayName,
+                seasonMmr = mmr,
+                matched = resolved is not null
+            };
+        }).ToList();
+
+        var matchedCount = playersView.Count(p => p.matched);
+        var radiantMatched = playersView.Count(p => p.matched && p.isRadiant);
+        var direMatched = playersView.Count(p => p.matched && !p.isRadiant);
+
+        string? importBlockedReason = null;
+        if (alreadyImported) importBlockedReason = "This Dota match ID has already been imported into the league.";
+        else if (activeSeason is null) importBlockedReason = "There is no active season to import into.";
+        else if (match.Players.Count != 10) importBlockedReason = $"Match must have 10 players, OpenDota reported {match.Players.Count}.";
+        else if (matchedCount != 10) importBlockedReason = $"Only {matchedCount}/10 players are registered in the league. Missing players need to sign in with Steam first.";
+        else if (radiantMatched != 5 || direMatched != 5) importBlockedReason = $"Teams aren't 5v5 (Radiant {radiantMatched}, Dire {direMatched}).";
+
         return Ok(new
         {
             found = true,
@@ -432,18 +489,161 @@ public class AdminController(
             startedAt = match.StartedAt,
             parsed = match.Parsed,
             playerCount = match.Players.Count,
-            players = match.Players.Select(p => new
-            {
-                accountId = p.AccountId,
-                isRadiant = p.IsRadiant,
-                playerSlot = p.PlayerSlot,
-                kills = p.Kills,
-                deaths = p.Deaths,
-                assists = p.Assists,
-                abandoned = p.Abandoned
-            })
+            matchedCount,
+            activeSeasonId = activeSeason?.Id,
+            activeSeasonName = activeSeason?.Name,
+            alreadyImported,
+            importable = importBlockedReason is null,
+            importBlockedReason,
+            players = playersView
         });
     }
+
+    /// <summary>
+    /// Import a historical Dota match that didn't get auto-recorded. Creates the
+    /// Match + MatchPlayers in the active season and runs the normal settlement
+    /// pipeline (Elo, W/L, MmrHistory, K/D/A). Admin-only recovery tool.
+    ///
+    /// Strict: fails unless all 10 OpenDota players map to League users and the
+    /// match isn't already imported.
+    /// </summary>
+    [HttpPost("matches/import-from-opendota")]
+    public async Task<IActionResult> ImportFromOpenDota([FromBody] ImportFromOpenDotaRequest req, CancellationToken ct)
+    {
+        var me = await currentUser.GetAsync();
+        if (me is null || !me.IsAdmin) return Forbid();
+        if (req.DotaMatchId <= 0) return BadRequest(new { error = "invalid_match_id" });
+
+        if (await db.Matches.AnyAsync(m => m.DotaMatchId == req.DotaMatchId, ct))
+            return Conflict(new { error = "already_imported" });
+
+        var season = await db.Seasons.FirstOrDefaultAsync(s => s.IsActive, ct);
+        if (season is null) return Conflict(new { error = "no_active_season" });
+
+        var dotaMatch = await openDota.GetMatchAsync(req.DotaMatchId, ct);
+        if (dotaMatch is null)
+            return UnprocessableEntity(new { error = "opendota_not_ready", hint = "OpenDota doesn't have the stats yet. Try again in a few minutes." });
+
+        if (dotaMatch.Players.Count != 10)
+            return UnprocessableEntity(new { error = "wrong_player_count", count = dotaMatch.Players.Count });
+
+        var steamId64s = dotaMatch.Players
+            .Where(p => p.AccountId > 0)
+            .Select(p => (p.AccountId + SteamIdBase).ToString())
+            .ToList();
+
+        var users = await db.Users
+            .Where(u => steamId64s.Contains(u.SteamId64))
+            .ToListAsync(ct);
+        var usersBySteamId = users.ToDictionary(u => u.SteamId64);
+
+        // Validate every OpenDota slot maps to a League user.
+        var missing = dotaMatch.Players
+            .Where(p => p.AccountId <= 0 || !usersBySteamId.ContainsKey((p.AccountId + SteamIdBase).ToString()))
+            .Select(p => new { accountId = p.AccountId, isRadiant = p.IsRadiant })
+            .ToList();
+        if (missing.Count > 0)
+            return UnprocessableEntity(new { error = "players_not_registered", missing });
+
+        var radiantCount = dotaMatch.Players.Count(p => p.IsRadiant);
+        if (radiantCount != 5)
+            return UnprocessableEntity(new { error = "not_five_v_five", radiant = radiantCount, dire = 10 - radiantCount });
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Auto-enroll any user who isn't yet in the active season (fresh sign-ins
+        // who are playing their first league game retroactively). Use the season's
+        // starting defaults so their MMR path begins cleanly.
+        var userIds = users.Select(u => u.Id).ToList();
+        var enrolledIds = await db.SeasonPlayers
+            .Where(sp => sp.SeasonId == season.Id && userIds.Contains(sp.UserId))
+            .Select(sp => sp.UserId)
+            .ToListAsync(ct);
+        var enrolledSet = enrolledIds.ToHashSet();
+
+        foreach (var uid in userIds.Where(id => !enrolledSet.Contains(id)))
+        {
+            db.SeasonPlayers.Add(new SeasonPlayer
+            {
+                SeasonId = season.Id,
+                UserId = uid,
+                Mmr = season.StartingMmr,
+                Rd = season.StartingRd,
+                Volatility = season.StartingVolatility,
+                JoinedAt = DateTime.UtcNow
+            });
+        }
+        if (userIds.Count != enrolledSet.Count) await db.SaveChangesAsync(ct);
+
+        // Snapshot pre-match MMR from SeasonPlayers so the MatchPlayer rows carry
+        // the same "MmrBefore" data the normal flow would have recorded.
+        var seasonPlayers = await db.SeasonPlayers
+            .Where(sp => sp.SeasonId == season.Id && userIds.Contains(sp.UserId))
+            .ToDictionaryAsync(sp => sp.UserId, ct);
+
+        var match = new Match
+        {
+            Id = Guid.NewGuid(),
+            SeasonId = season.Id,
+            DotaMatchId = req.DotaMatchId,
+            Status = MatchStatus.Live,
+            CreatedAt = DateTime.UtcNow,
+            StartedAt = dotaMatch.StartedAt ?? DateTime.UtcNow
+        };
+        db.Matches.Add(match);
+
+        foreach (var op in dotaMatch.Players)
+        {
+            var steamId64 = (op.AccountId + SteamIdBase).ToString();
+            var user = usersBySteamId[steamId64];
+            var sp = seasonPlayers[user.Id];
+
+            db.MatchPlayers.Add(new MatchPlayer
+            {
+                MatchId = match.Id,
+                UserId = user.Id,
+                Team = op.IsRadiant ? Team.Radiant : Team.Dire,
+                MmrBefore = sp.Mmr,
+                RdBefore = sp.Rd,
+                JoinedLobby = true
+                // K/D/A and MmrAfter get filled in by SettleFromOpenDotaAsync below.
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // Hand off to the same pipeline the live poller uses — this populates
+        // K/D/A, abandon flags, MMR after, MmrHistory, flips to Completed.
+        var settled = await settlement.SettleFromOpenDotaAsync(match.Id, dotaMatch, ct);
+        if (!settled)
+        {
+            // Shouldn't happen — we just created it — but roll back if so.
+            await tx.RollbackAsync(ct);
+            return StatusCode(500, new { error = "settle_failed" });
+        }
+
+        await tx.CommitAsync(ct);
+
+        logger.LogWarning(
+            "Admin {Admin} imported historical Dota match {DotaMatchId} as league match {MatchId} (radiantWin={Radiant}, duration={Dur}s)",
+            me.DisplayName, req.DotaMatchId, match.Id, dotaMatch.RadiantWin, dotaMatch.DurationSec);
+
+        return Ok(new
+        {
+            imported = true,
+            matchId = match.Id,
+            dotaMatchId = req.DotaMatchId,
+            seasonId = season.Id,
+            seasonName = season.Name,
+            radiantWin = dotaMatch.RadiantWin,
+            durationSec = dotaMatch.DurationSec
+        });
+    }
+
+    public record ImportFromOpenDotaRequest(long DotaMatchId);
+
+    // Steam64 = AccountId32 + 76561197960265728. Used here + in MatchSettlementService.
+    private const long SteamIdBase = 76561197960265728L;
 
     /// <summary>
     /// Dev/test helper: ensure the active season's queue has at least <paramref name="targetSize"/>

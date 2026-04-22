@@ -338,6 +338,31 @@
 
   .probe-table {
     margin-top: 0.8rem;
+
+    .unmatched-row {
+      opacity: 0.6;
+      background: rgba(217, 83, 79, 0.05);
+    }
+  }
+
+  .import-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed #2d3a4a;
+  }
+
+  .success {
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.3rem;
+    background: rgba(91, 168, 95, 0.1);
+    border: 1px solid rgba(91, 168, 95, 0.35);
+    color: #7bc67f;
+    font-size: 0.9rem;
   }
 }
 
