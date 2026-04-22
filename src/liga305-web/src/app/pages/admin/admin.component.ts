@@ -291,14 +291,19 @@ export class AdminComponent {
     const r = this.probeResult();
     if (!r || !r.found || !r.importable) return;
     const label = `match ${r.dotaMatchId} (${r.radiantWin ? 'Radiant win' : 'Dire win'}, ${r.durationSec}s)`;
-    if (!confirm(`Register ${label} into season "${r.activeSeasonName}"?\n\nThis will create the match, record K/D/A, update W/L, and recalculate MMR for all 10 players. This cannot be undone without a league reset.`)) return;
+    const placeholders = r.willCreatePlaceholders ?? 0;
+    const placeholderLine = placeholders > 0
+      ? `\n\n${placeholders} placeholder account(s) will be created for unregistered players. They'll be auto-claimed when those players sign in with Steam.`
+      : '';
+    if (!confirm(`Register ${label} into season "${r.activeSeasonName}"?\n\nThis will create the match, record K/D/A, update W/L, and recalculate MMR for all 10 players. This cannot be undone without a league reset.${placeholderLine}`)) return;
 
     this.importing.set(true);
     this.importMessage.set(null);
     this.probeError.set(null);
     try {
       const res = await this.adminSvc.importMatchFromOpenDota(r.dotaMatchId);
-      this.importMessage.set(`Imported — match ${res.matchId.slice(0, 8)} registered in "${res.seasonName}". ${res.radiantWin ? 'Radiant' : 'Dire'} won (${res.durationSec}s).`);
+      const ph = res.placeholdersCreated > 0 ? ` ${res.placeholdersCreated} placeholder account(s) created.` : '';
+      this.importMessage.set(`Imported — match ${res.matchId.slice(0, 8)} registered in "${res.seasonName}". ${res.radiantWin ? 'Radiant' : 'Dire'} won (${res.durationSec}s).${ph}`);
       // Re-probe so the result now shows "already imported" if they re-check.
       await this.probeOpenDota();
       // Refresh the matches list so the new row appears below.
@@ -310,7 +315,7 @@ export class AdminComponent {
         no_active_season: 'There is no active season to import into.',
         opendota_not_ready: 'OpenDota doesn\'t have the stats yet. Try again in a few minutes.',
         wrong_player_count: 'Match does not have 10 players.',
-        players_not_registered: 'Some players are not registered in the league.',
+        anonymous_slot: 'One or more players have a hidden Dota profile and can\'t be imported.',
         not_five_v_five: 'Teams are not balanced 5v5.',
       };
       this.probeError.set(pretty[code] ?? e?.error?.error ?? 'Import failed.');

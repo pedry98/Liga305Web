@@ -4,6 +4,7 @@ using Liga305.Infrastructure.BotWorker;
 using Liga305.Infrastructure.Matches;
 using Liga305.Infrastructure.OpenDota;
 using Liga305.Infrastructure.Persistence;
+using Liga305.Infrastructure.Steam;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public class AdminController(
     MatchSettlementService settlement,
     BotWorkerClient bot,
     OpenDotaClient openDota,
+    SteamWebApiClient steam,
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
@@ -470,15 +472,17 @@ public class AdminController(
         }).ToList();
 
         var matchedCount = playersView.Count(p => p.matched);
-        var radiantMatched = playersView.Count(p => p.matched && p.isRadiant);
-        var direMatched = playersView.Count(p => p.matched && !p.isRadiant);
+        var radiantTotal = match.Players.Count(p => p.IsRadiant);
+        var direTotal = match.Players.Count - radiantTotal;
+        var anonymousSlots = match.Players.Count(p => p.AccountId <= 0);
+        var willCreatePlaceholders = match.Players.Count - matchedCount - anonymousSlots;
 
         string? importBlockedReason = null;
         if (alreadyImported) importBlockedReason = "This Dota match ID has already been imported into the league.";
         else if (activeSeason is null) importBlockedReason = "There is no active season to import into.";
         else if (match.Players.Count != 10) importBlockedReason = $"Match must have 10 players, OpenDota reported {match.Players.Count}.";
-        else if (matchedCount != 10) importBlockedReason = $"Only {matchedCount}/10 players are registered in the league. Missing players need to sign in with Steam first.";
-        else if (radiantMatched != 5 || direMatched != 5) importBlockedReason = $"Teams aren't 5v5 (Radiant {radiantMatched}, Dire {direMatched}).";
+        else if (anonymousSlots > 0) importBlockedReason = $"{anonymousSlots} player(s) have hidden Dota profiles, so they can't be tied to a Steam account. Ask them to make their profile public and re-probe.";
+        else if (radiantTotal != 5 || direTotal != 5) importBlockedReason = $"Teams aren't 5v5 (Radiant {radiantTotal}, Dire {direTotal}).";
 
         return Ok(new
         {
@@ -490,6 +494,7 @@ public class AdminController(
             parsed = match.Parsed,
             playerCount = match.Players.Count,
             matchedCount,
+            willCreatePlaceholders,
             activeSeasonId = activeSeason?.Id,
             activeSeasonName = activeSeason?.Name,
             alreadyImported,
@@ -527,34 +532,61 @@ public class AdminController(
         if (dotaMatch.Players.Count != 10)
             return UnprocessableEntity(new { error = "wrong_player_count", count = dotaMatch.Players.Count });
 
-        var steamId64s = dotaMatch.Players
-            .Where(p => p.AccountId > 0)
-            .Select(p => (p.AccountId + SteamIdBase).ToString())
-            .ToList();
-
-        var users = await db.Users
-            .Where(u => steamId64s.Contains(u.SteamId64))
-            .ToListAsync(ct);
-        var usersBySteamId = users.ToDictionary(u => u.SteamId64);
-
-        // Validate every OpenDota slot maps to a League user.
-        var missing = dotaMatch.Players
-            .Where(p => p.AccountId <= 0 || !usersBySteamId.ContainsKey((p.AccountId + SteamIdBase).ToString()))
-            .Select(p => new { accountId = p.AccountId, isRadiant = p.IsRadiant })
-            .ToList();
-        if (missing.Count > 0)
-            return UnprocessableEntity(new { error = "players_not_registered", missing });
+        // Anonymous slots (account_id = 0) are hidden-profile players — we can't
+        // tie them to a Steam identity, so they can never be claimed by a real
+        // sign-in later. Refuse to import those.
+        if (dotaMatch.Players.Any(p => p.AccountId <= 0))
+            return UnprocessableEntity(new { error = "anonymous_slot", hint = "One or more players have a hidden Dota profile." });
 
         var radiantCount = dotaMatch.Players.Count(p => p.IsRadiant);
         if (radiantCount != 5)
             return UnprocessableEntity(new { error = "not_five_v_five", radiant = radiantCount, dire = 10 - radiantCount });
 
+        var steamId64s = dotaMatch.Players
+            .Select(p => (p.AccountId + SteamIdBase).ToString())
+            .ToList();
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
+        var existingUsers = await db.Users
+            .Where(u => steamId64s.Contains(u.SteamId64))
+            .ToListAsync(ct);
+        var usersBySteamId = existingUsers.ToDictionary(u => u.SteamId64);
+
+        // For any OpenDota slot not yet in our Users table, create a placeholder
+        // User row keyed by Steam64. When that player eventually signs in with
+        // Steam, SteamAuthController finds them by SteamId64 and refreshes their
+        // DisplayName/AvatarUrl (since HasCustomProfile=false) — so the stats
+        // we record here get attributed to them seamlessly on first login.
+        var placeholdersCreated = 0;
+        foreach (var op in dotaMatch.Players)
+        {
+            var steamId64 = (op.AccountId + SteamIdBase).ToString();
+            if (usersBySteamId.ContainsKey(steamId64)) continue;
+
+            // Best-effort persona fetch. If the Steam Web API key isn't configured
+            // or the call fails, fall back to "Player <accountId>" — Steam sign-in
+            // will replace it later anyway.
+            var summary = await steam.GetPlayerSummaryAsync(steamId64, ct);
+            var placeholder = new User
+            {
+                Id = Guid.NewGuid(),
+                SteamId64 = steamId64,
+                DisplayName = summary?.PersonaName ?? $"Player {op.AccountId}",
+                AvatarUrl = summary?.AvatarUrl,
+                CreatedAt = DateTime.UtcNow,
+                HasCustomProfile = false
+            };
+            db.Users.Add(placeholder);
+            usersBySteamId[steamId64] = placeholder;
+            placeholdersCreated++;
+        }
+        if (placeholdersCreated > 0) await db.SaveChangesAsync(ct);
+
         // Auto-enroll any user who isn't yet in the active season (fresh sign-ins
-        // who are playing their first league game retroactively). Use the season's
-        // starting defaults so their MMR path begins cleanly.
-        var userIds = users.Select(u => u.Id).ToList();
+        // who are playing their first league game retroactively, plus the
+        // placeholders we just created). Use season starting defaults.
+        var userIds = usersBySteamId.Values.Select(u => u.Id).ToList();
         var enrolledIds = await db.SeasonPlayers
             .Where(sp => sp.SeasonId == season.Id && userIds.Contains(sp.UserId))
             .Select(sp => sp.UserId)
@@ -625,8 +657,8 @@ public class AdminController(
         await tx.CommitAsync(ct);
 
         logger.LogWarning(
-            "Admin {Admin} imported historical Dota match {DotaMatchId} as league match {MatchId} (radiantWin={Radiant}, duration={Dur}s)",
-            me.DisplayName, req.DotaMatchId, match.Id, dotaMatch.RadiantWin, dotaMatch.DurationSec);
+            "Admin {Admin} imported historical Dota match {DotaMatchId} as league match {MatchId} (radiantWin={Radiant}, duration={Dur}s, placeholdersCreated={Placeholders})",
+            me.DisplayName, req.DotaMatchId, match.Id, dotaMatch.RadiantWin, dotaMatch.DurationSec, placeholdersCreated);
 
         return Ok(new
         {
@@ -636,7 +668,8 @@ public class AdminController(
             seasonId = season.Id,
             seasonName = season.Name,
             radiantWin = dotaMatch.RadiantWin,
-            durationSec = dotaMatch.DurationSec
+            durationSec = dotaMatch.DurationSec,
+            placeholdersCreated
         });
     }
 

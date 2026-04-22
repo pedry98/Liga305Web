@@ -272,7 +272,11 @@
                     <button type="button" class="btn btn-primary" (click)="importProbedMatch()" [disabled]="importing()">
                       {{ importing() ? 'Registering…' : 'Register match in ' + (r.activeSeasonName ?? 'active season') }}
                     </button>
-                    <span class="muted small">Creates the match, updates MMR, records W/L.</span>
+                    @if ((r.willCreatePlaceholders ?? 0) > 0) {
+                      <span class="muted small">Creates the match + {{ r.willCreatePlaceholders }} placeholder account(s) for unregistered players (auto-claimed on first Steam sign-in).</span>
+                    } @else {
+                      <span class="muted small">Creates the match, updates MMR, records W/L.</span>
+                    }
                   } @else if (r.alreadyImported) {
                     <span class="badge ok">Already imported</span>
                     <span class="muted small">This Dota match ID is already in the league.</span>
@@ -306,8 +310,10 @@
                           <td>
                             @if (p.matched) {
                               {{ p.leagueDisplayName }}
+                            } @else if (p.accountId > 0) {
+                              <span class="muted">New — placeholder will be created</span>
                             } @else {
-                              <span class="muted">Not in league</span>
+                              <span class="muted">Anonymous (hidden profile)</span>
                             }
                           </td>
                           <td class="num">{{ p.seasonMmr ?? '—' }}</td>

@@ -186,6 +186,7 @@ export interface OpenDotaProbeResult {
   parsed?: boolean;
   playerCount?: number;
   matchedCount?: number;
+  willCreatePlaceholders?: number;
   activeSeasonId?: string | null;
   activeSeasonName?: string | null;
   alreadyImported?: boolean;
@@ -202,4 +203,5 @@ export interface ImportMatchResult {
   seasonName: string;
   radiantWin: boolean;
   durationSec: number;
+  placeholdersCreated: number;
 }
