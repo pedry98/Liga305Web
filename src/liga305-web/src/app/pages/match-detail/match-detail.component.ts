@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -5,13 +6,14 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { interval } from 'rxjs';
 import { AdminService } from '../../core/admin.service';
 import { AuthService } from '../../core/auth.service';
+import { DotaConstantsService, HeroInfo, ItemInfo } from '../../core/dota-constants.service';
 import { MatchService } from '../../core/match.service';
 import { MatchDetail, MatchPlayer, Team } from '../../models/match';
 
 @Component({
   selector: 'app-match-detail',
   standalone: true,
-  imports: [RouterLink, FormsModule],
+  imports: [RouterLink, FormsModule, NgTemplateOutlet],
   templateUrl: './match-detail.component.html',
   styleUrl: './match-detail.component.scss'
 })
@@ -21,6 +23,8 @@ export class MatchDetailComponent {
   private readonly admin = inject(AdminService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dotaConstants = inject(DotaConstantsService);
+  readonly constantsLoaded = this.dotaConstants.loaded;
 
   readonly user = this.auth.user;
   readonly match = signal<MatchDetail | null | undefined>(undefined);
@@ -82,9 +86,90 @@ export class MatchDetailComponent {
     return m.players.find(p => p.userId === m.currentPickerUserId)?.displayName ?? null;
   });
 
+  // ---- Post-game rich stats -----------------------------------------------
+
+  readonly radiantTotals = computed(() => this.teamTotals('Radiant'));
+  readonly direTotals = computed(() => this.teamTotals('Dire'));
+
+  /** Gold-advantage area-chart path + polarity zones. */
+  readonly goldChart = computed(() => this.buildAdvantageChart(this.match()?.radiantGoldAdv ?? null));
+  readonly xpChart = computed(() => this.buildAdvantageChart(this.match()?.radiantXpAdv ?? null));
+
+  hero(p: MatchPlayer): HeroInfo | null { return this.dotaConstants.hero(p.heroId); }
+  item(id: number | null | undefined): ItemInfo | null { return this.dotaConstants.item(id ?? null); }
+
+  fmtInt(n: number | null | undefined): string {
+    if (n == null) return '—';
+    return n.toLocaleString();
+  }
+
+  // Compact net-worth format: "12.3k" for anything over 1000.
+  fmtNetWorth(n: number | null | undefined): string {
+    if (n == null) return '—';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+  }
+
+  private teamTotals(team: Team) {
+    const m = this.match();
+    if (!m) return { kills: 0, netWorth: 0 };
+    const ps = m.players.filter(p => p.team === team);
+    return {
+      kills: ps.reduce((s, p) => s + (p.kills ?? 0), 0),
+      netWorth: ps.reduce((s, p) => s + (p.netWorth ?? 0), 0)
+    };
+  }
+
+  /**
+   * Build an SVG path for a per-minute Radiant-advantage array. Positive = Radiant
+   * leads (green), negative = Dire leads (red). Output is normalized to a 0..1
+   * coordinate space — the template scales to actual pixels via preserveAspectRatio="none".
+   */
+  private buildAdvantageChart(series: number[] | null) {
+    if (!series || series.length < 2) return null;
+    const n = series.length;
+    const maxAbs = Math.max(1, ...series.map(v => Math.abs(v)));
+
+    // Map point i to (x, y) in 0..1.
+    const x = (i: number) => n === 1 ? 0 : i / (n - 1);
+    const y = (v: number) => 0.5 - (v / (2 * maxAbs)); // zero line at 0.5; +v goes up
+
+    // Line path.
+    let linePath = '';
+    for (let i = 0; i < n; i++) {
+      linePath += `${i === 0 ? 'M' : 'L'}${x(i).toFixed(4)},${y(series[i]).toFixed(4)} `;
+    }
+
+    // Filled area — closed to the zero line. Drawn once with a clip per polarity
+    // in the template (we render it twice, clipped to positive / negative halves).
+    let areaPath = `M${x(0).toFixed(4)},0.5 `;
+    for (let i = 0; i < n; i++) areaPath += `L${x(i).toFixed(4)},${y(series[i]).toFixed(4)} `;
+    areaPath += `L${x(n - 1).toFixed(4)},0.5 Z`;
+
+    // Peak lead labels.
+    let maxPos = 0, maxPosIdx = 0, maxNeg = 0, maxNegIdx = 0;
+    series.forEach((v, i) => {
+      if (v > maxPos) { maxPos = v; maxPosIdx = i; }
+      if (v < maxNeg) { maxNeg = v; maxNegIdx = i; }
+    });
+
+    return {
+      linePath,
+      areaPath,
+      points: n,
+      durationMin: n - 1,
+      midMin: Math.floor((n - 1) / 2),
+      peakRadiant: maxPos > 0 ? { value: maxPos, atMinute: maxPosIdx } : null,
+      peakDire: maxNeg < 0 ? { value: -maxNeg, atMinute: maxNegIdx } : null
+    };
+  }
+
   constructor() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
     this.matches.getById(id).subscribe(m => this.match.set(m));
+
+    // Kick off the hero/item constants fetch. Doesn't block the initial render.
+    this.dotaConstants.ensureLoaded();
 
     // Poll every 3s while the match is in a transient state (Draft -> Lobby -> Live).
     interval(3000)

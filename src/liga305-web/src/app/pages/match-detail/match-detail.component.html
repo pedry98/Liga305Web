@@ -84,6 +84,11 @@
       <div class="result-banner" [class.radiant-win]="m.radiantWin" [class.dire-win]="!m.radiantWin">
         <span class="result-team">{{ m.radiantWin ? 'Radiant' : 'Dire' }}</span>
         <span class="result-label">Victory</span>
+        <span class="result-score">
+          <span class="score-radiant">{{ radiantTotals().kills }}</span>
+          <span class="score-sep">vs</span>
+          <span class="score-dire">{{ direTotals().kills }}</span>
+        </span>
       </div>
     } @else if (m.status === 'Abandoned') {
       <div class="result-banner abandoned">
@@ -157,6 +162,7 @@
       </div>
     }
 
+    @if (m.status !== 'Completed') {
     <div class="teams-grid">
       <div class="team-card radiant" [class.winner]="teamWon('Radiant', m.radiantWin)">
         <header class="team-head">
@@ -250,5 +256,210 @@
         </ul>
       </div>
     </div>
+    }
+
+    @if (m.status === 'Completed') {
+      @if (goldChart(); as g) {
+        <section class="chart-card">
+          <header class="chart-head">
+            <h2>Gold advantage</h2>
+            <div class="chart-peaks">
+              @if (g.peakRadiant) {
+                <span class="peak-radiant" title="Radiant's biggest lead">
+                  <span class="peak-label">Radiant peak</span>
+                  <span class="peak-value">+{{ fmtNetWorth(g.peakRadiant.value) }}</span>
+                  <span class="peak-at">&#64; {{ g.peakRadiant.atMinute }}'</span>
+                </span>
+              }
+              @if (g.peakDire) {
+                <span class="peak-dire" title="Dire's biggest lead">
+                  <span class="peak-label">Dire peak</span>
+                  <span class="peak-value">+{{ fmtNetWorth(g.peakDire.value) }}</span>
+                  <span class="peak-at">&#64; {{ g.peakDire.atMinute }}'</span>
+                </span>
+              }
+            </div>
+          </header>
+          <div class="chart-wrap" role="img"
+               aria-label="Net gold advantage over time. Positive values mean Radiant leads.">
+            <svg viewBox="0 0 1 1" preserveAspectRatio="none" class="chart-svg">
+              <defs>
+                <linearGradient id="radiantFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(123, 198, 127, 0.55)" />
+                  <stop offset="100%" stop-color="rgba(123, 198, 127, 0.05)" />
+                </linearGradient>
+                <linearGradient id="direFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(217, 128, 126, 0.05)" />
+                  <stop offset="100%" stop-color="rgba(217, 128, 126, 0.55)" />
+                </linearGradient>
+                <clipPath id="clipTop" clipPathUnits="userSpaceOnUse">
+                  <rect x="0" y="0" width="1" height="0.5" />
+                </clipPath>
+                <clipPath id="clipBot" clipPathUnits="userSpaceOnUse">
+                  <rect x="0" y="0.5" width="1" height="0.5" />
+                </clipPath>
+              </defs>
+              <path [attr.d]="g.areaPath" fill="url(#radiantFill)" clip-path="url(#clipTop)" />
+              <path [attr.d]="g.areaPath" fill="url(#direFill)" clip-path="url(#clipBot)" />
+              <line x1="0" y1="0.5" x2="1" y2="0.5" class="chart-zero-line" vector-effect="non-scaling-stroke" />
+              <path [attr.d]="g.linePath" fill="none" class="chart-line" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div class="chart-xaxis">
+              <span>0'</span>
+              <span>{{ g.midMin }}'</span>
+              <span>{{ g.durationMin }}'</span>
+            </div>
+          </div>
+        </section>
+      } @else if (!m.radiantGoldAdv) {
+        <p class="muted small center chart-missing">Gold/XP advantage graphs appear once OpenDota has parsed the replay (usually within a few minutes).</p>
+      }
+
+      <section class="scoreboard-card radiant-side" [class.winner]="m.radiantWin">
+        <header class="sb-head">
+          <h2>Radiant</h2>
+          @if (m.radiantWin) { <span class="crown">Victory</span> }
+          <span class="sb-kills">{{ radiantTotals().kills }} kills</span>
+          <span class="sb-nw">{{ fmtNetWorth(radiantTotals().netWorth) }} net worth</span>
+        </header>
+        <div class="sb-table-wrap">
+          <table class="sb-table">
+            <thead>
+              <tr>
+                <th class="sb-hero">Hero</th>
+                <th class="sb-name">Player</th>
+                <th class="sb-num" title="Kills / Deaths / Assists">KDA</th>
+                <th class="sb-num" title="Last hits / Denies">LH / DN</th>
+                <th class="sb-num" title="Net worth">NW</th>
+                <th class="sb-num" title="Gold per min / XP per min">GPM / XPM</th>
+                <th class="sb-num" title="Hero damage">HD</th>
+                <th class="sb-num" title="Tower damage">TD</th>
+                <th class="sb-num" title="Hero healing">HEAL</th>
+                <th class="sb-items">Items</th>
+                <th class="sb-mmr">MMR</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of radiant(); track p.userId) {
+                <ng-container *ngTemplateOutlet="playerRow; context: { $implicit: p }"></ng-container>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="scoreboard-card dire-side" [class.winner]="!m.radiantWin">
+        <header class="sb-head">
+          <h2>Dire</h2>
+          @if (!m.radiantWin) { <span class="crown">Victory</span> }
+          <span class="sb-kills">{{ direTotals().kills }} kills</span>
+          <span class="sb-nw">{{ fmtNetWorth(direTotals().netWorth) }} net worth</span>
+        </header>
+        <div class="sb-table-wrap">
+          <table class="sb-table">
+            <thead>
+              <tr>
+                <th class="sb-hero">Hero</th>
+                <th class="sb-name">Player</th>
+                <th class="sb-num" title="Kills / Deaths / Assists">KDA</th>
+                <th class="sb-num" title="Last hits / Denies">LH / DN</th>
+                <th class="sb-num" title="Net worth">NW</th>
+                <th class="sb-num" title="Gold per min / XP per min">GPM / XPM</th>
+                <th class="sb-num" title="Hero damage">HD</th>
+                <th class="sb-num" title="Tower damage">TD</th>
+                <th class="sb-num" title="Hero healing">HEAL</th>
+                <th class="sb-items">Items</th>
+                <th class="sb-mmr">MMR</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of dire(); track p.userId) {
+                <ng-container *ngTemplateOutlet="playerRow; context: { $implicit: p }"></ng-container>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <ng-template #playerRow let-p>
+        <tr [class.abandoned]="p.abandoned">
+          <td class="sb-hero">
+            @if (hero(p); as h) {
+              <img [src]="h.iconUrl" [alt]="h.localizedName" [title]="h.localizedName" class="hero-portrait" />
+            } @else if (p.heroId) {
+              <span class="hero-fallback" [title]="'Hero ID ' + p.heroId">#{{ p.heroId }}</span>
+            } @else {
+              <span class="hero-fallback muted">—</span>
+            }
+          </td>
+          <td class="sb-name">
+            <div class="sb-player">
+              @if (p.avatarUrl) {
+                <img [src]="p.avatarUrl" alt="" class="avatar-xs" />
+              } @else {
+                <span class="avatar-xs avatar-placeholder">{{ p.displayName.charAt(0) }}</span>
+              }
+              <div class="sb-player-text">
+                <span class="sb-player-name">{{ p.displayName }}</span>
+                <span class="sb-player-tags">
+                  @if (p.isCaptain) { <span class="tag captain-tag" title="Captain">C</span> }
+                  @if (p.abandoned) { <span class="tag abandon-tag">Abandoned</span> }
+                </span>
+              </div>
+            </div>
+          </td>
+          <td class="sb-num sb-kda">
+            <span class="kda-k">{{ p.kills ?? '—' }}</span>
+            <span class="kda-sep">/</span>
+            <span class="kda-d">{{ p.deaths ?? '—' }}</span>
+            <span class="kda-sep">/</span>
+            <span class="kda-a">{{ p.assists ?? '—' }}</span>
+          </td>
+          <td class="sb-num">{{ fmtInt(p.lastHits) }} / {{ fmtInt(p.denies) }}</td>
+          <td class="sb-num sb-networth">{{ fmtNetWorth(p.netWorth) }}</td>
+          <td class="sb-num">{{ fmtInt(p.goldPerMin) }} / {{ fmtInt(p.xpPerMin) }}</td>
+          <td class="sb-num">{{ fmtNetWorth(p.heroDamage) }}</td>
+          <td class="sb-num">{{ fmtNetWorth(p.towerDamage) }}</td>
+          <td class="sb-num">{{ fmtNetWorth(p.heroHealing) }}</td>
+          <td class="sb-items">
+            <div class="items-grid">
+              @for (id of p.items; track $index) {
+                @if (item(id); as it) {
+                  <img [src]="it.iconUrl" [alt]="it.localizedName" [title]="it.localizedName" class="item-icon" />
+                } @else {
+                  <span class="item-empty"></span>
+                }
+              }
+            </div>
+            <div class="backpack-row">
+              @for (id of p.backpack; track $index) {
+                @if (item(id); as it) {
+                  <img [src]="it.iconUrl" [alt]="it.localizedName" [title]="'Backpack: ' + it.localizedName" class="item-icon item-icon-bp" />
+                } @else {
+                  <span class="item-empty item-empty-bp"></span>
+                }
+              }
+              @if (item(p.itemNeutral); as it) {
+                <img [src]="it.iconUrl" [alt]="it.localizedName" [title]="'Neutral: ' + it.localizedName" class="item-icon item-icon-neutral" />
+              } @else {
+                <span class="item-empty item-icon-neutral"></span>
+              }
+            </div>
+          </td>
+          <td class="sb-mmr">
+            <div class="mmr-stack">
+              <span class="mmr-before">{{ p.mmrBefore }}</span>
+              @if (p.mmrAfter !== null) {
+                @let d = mmrDelta(p);
+                <span class="mmr-after">{{ p.mmrAfter }}</span>
+                <span class="delta" [class.up]="d && d > 0" [class.down]="d && d < 0">
+                  {{ d && d > 0 ? '+' : '' }}{{ d }}
+                </span>
+              }
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    }
   </section>
 }

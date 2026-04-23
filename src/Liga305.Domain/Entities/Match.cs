@@ -28,6 +28,12 @@ public class Match
     public int? DurationSec { get; set; }
     public bool? RadiantWin { get; set; }
 
+    // OpenDota per-minute "radiant advantage" series — positive = Radiant lead,
+    // negative = Dire lead. JSON-encoded int[] (one entry per minute, starting
+    // at 0:00). Null = not available (match not parsed yet).
+    public string? RadiantGoldAdvJson { get; set; }
+    public string? RadiantXpAdvJson { get; set; }
+
     // Captain-pick: populated when the queue pops. The two captains take turns
     // picking from the remaining 8 players.
     public Guid? RadiantCaptainUserId { get; set; }

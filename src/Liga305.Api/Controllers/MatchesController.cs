@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Liga305.Api.Auth;
 using Liga305.Api.Contracts;
 using Liga305.Domain.Entities;
@@ -196,6 +197,13 @@ public class MatchesController(
 
         var captainIds = new HashSet<Guid?> { m.RadiantCaptainUserId, m.DireCaptainUserId };
 
+        static IReadOnlyList<int>? ParseIntArray(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try { return JsonSerializer.Deserialize<List<int>>(json); }
+            catch { return null; }
+        }
+
         return Ok(new MatchDetailDto(
             m.Id, m.SeasonId, m.Season.Name, m.DotaMatchId, m.Status.ToString(),
             m.CreatedAt, m.StartedAt, m.EndedAt, m.DurationSec, m.RadiantWin,
@@ -206,6 +214,8 @@ public class MatchesController(
             m.DireCaptainUserId,
             currentPickerUserId,
             currentPickerTeam,
+            ParseIntArray(m.RadiantGoldAdvJson),
+            ParseIntArray(m.RadiantXpAdvJson),
             m.Players
                 .OrderBy(p => p.PickOrder ?? 999).ThenBy(p => p.Team).ThenByDescending(p => p.MmrBefore)
                 .Select(p => new MatchPlayerDto(
@@ -217,7 +227,12 @@ public class MatchesController(
                     p.Kills, p.Deaths, p.Assists,
                     p.PickOrder,
                     captainIds.Contains(p.UserId),
-                    p.PickOrder is not null))
+                    p.PickOrder is not null,
+                    p.HeroId, p.LastHits, p.Denies, p.GoldPerMin, p.XpPerMin,
+                    p.NetWorth, p.HeroDamage, p.TowerDamage, p.HeroHealing,
+                    new int?[] { p.Item0, p.Item1, p.Item2, p.Item3, p.Item4, p.Item5 },
+                    new int?[] { p.Backpack0, p.Backpack1, p.Backpack2 },
+                    p.ItemNeutral))
                 .ToList()));
     }
 

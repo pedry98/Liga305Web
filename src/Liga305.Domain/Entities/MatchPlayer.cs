@@ -24,6 +24,28 @@ public class MatchPlayer
     public int? Kills { get; set; }
     public int? Deaths { get; set; }
     public int? Assists { get; set; }
+    public int? LastHits { get; set; }
+    public int? Denies { get; set; }
+    public int? GoldPerMin { get; set; }
+    public int? XpPerMin { get; set; }
+    public int? NetWorth { get; set; }
+    public int? HeroDamage { get; set; }
+    public int? TowerDamage { get; set; }
+    public int? HeroHealing { get; set; }
+
+    // Inventory slots 0..5, backpack 0..2, plus neutral. Dota item IDs (nullable
+    // = empty slot). Resolved to names/icons by the SPA using OpenDota's
+    // /constants/items lookup.
+    public int? Item0 { get; set; }
+    public int? Item1 { get; set; }
+    public int? Item2 { get; set; }
+    public int? Item3 { get; set; }
+    public int? Item4 { get; set; }
+    public int? Item5 { get; set; }
+    public int? Backpack0 { get; set; }
+    public int? Backpack1 { get; set; }
+    public int? Backpack2 { get; set; }
+    public int? ItemNeutral { get; set; }
 
     // Captain-pick draft order: 0 = captain, 1 = first pick, 2 = second pick, ...
     // Null while drafting is still in progress for this slot.

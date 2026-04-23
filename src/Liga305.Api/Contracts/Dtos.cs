@@ -66,7 +66,19 @@ public record MatchPlayerDto(
     int? Assists,
     int? PickOrder,
     bool IsCaptain,
-    bool IsPicked);
+    bool IsPicked,
+    int? HeroId,
+    int? LastHits,
+    int? Denies,
+    int? GoldPerMin,
+    int? XpPerMin,
+    int? NetWorth,
+    int? HeroDamage,
+    int? TowerDamage,
+    int? HeroHealing,
+    IReadOnlyList<int?> Items,      // length 6 (inventory slots)
+    IReadOnlyList<int?> Backpack,   // length 3
+    int? ItemNeutral);
 
 public record MatchDetailDto(
     Guid Id,
@@ -89,6 +101,8 @@ public record MatchDetailDto(
     Guid? DireCaptainUserId,
     Guid? CurrentPickerUserId,    // captain whose turn it is, or null if drafting is done
     string? CurrentPickerTeam,    // "Radiant" / "Dire" / null
+    IReadOnlyList<int>? RadiantGoldAdv,  // per-minute gold advantage (Radiant lead = positive)
+    IReadOnlyList<int>? RadiantXpAdv,
     IReadOnlyList<MatchPlayerDto> Players);
 
 public record PickPlayerRequest(Guid UserId);

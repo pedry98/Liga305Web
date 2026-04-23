@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Liga305.Domain.Entities;
 using Liga305.Infrastructure.OpenDota;
 using Liga305.Infrastructure.Persistence;
@@ -69,6 +70,27 @@ public class MatchSettlementService(Liga305DbContext db, ILogger<MatchSettlement
                 player.Deaths  = oPlayer.Deaths;
                 player.Assists = oPlayer.Assists;
                 player.Abandoned = oPlayer.Abandoned;
+
+                // Rich post-game stats (all nullable on OpenDota — preserve nulls).
+                player.HeroId      = oPlayer.HeroId;
+                player.LastHits    = oPlayer.LastHits;
+                player.Denies      = oPlayer.Denies;
+                player.GoldPerMin  = oPlayer.GoldPerMin;
+                player.XpPerMin    = oPlayer.XpPerMin;
+                player.NetWorth    = oPlayer.NetWorth;
+                player.HeroDamage  = oPlayer.HeroDamage;
+                player.TowerDamage = oPlayer.TowerDamage;
+                player.HeroHealing = oPlayer.HeroHealing;
+                player.Item0       = oPlayer.Item0;
+                player.Item1       = oPlayer.Item1;
+                player.Item2       = oPlayer.Item2;
+                player.Item3       = oPlayer.Item3;
+                player.Item4       = oPlayer.Item4;
+                player.Item5       = oPlayer.Item5;
+                player.Backpack0   = oPlayer.Backpack0;
+                player.Backpack1   = oPlayer.Backpack1;
+                player.Backpack2   = oPlayer.Backpack2;
+                player.ItemNeutral = oPlayer.ItemNeutral;
             }
 
             if (player.Abandoned)
@@ -100,6 +122,10 @@ public class MatchSettlementService(Liga305DbContext db, ILogger<MatchSettlement
         match.RadiantWin = radiantWin;
         match.EndedAt = DateTime.UtcNow;
         match.DurationSec = durationSec;
+        if (openDotaMatch?.RadiantGoldAdv is { Count: > 0 } rga)
+            match.RadiantGoldAdvJson = JsonSerializer.Serialize(rga);
+        if (openDotaMatch?.RadiantXpAdv is { Count: > 0 } rxa)
+            match.RadiantXpAdvJson = JsonSerializer.Serialize(rxa);
 
         await db.SaveChangesAsync(ct);
 
