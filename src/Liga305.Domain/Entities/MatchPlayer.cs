@@ -47,6 +47,11 @@ public class MatchPlayer
     public int? Backpack2 { get; set; }
     public int? ItemNeutral { get; set; }
 
+    // Per-minute net-worth array from OpenDota (`gold_t`) — index = minute, value
+    // = total net worth at that minute. JSON-encoded int[]. Null when the match
+    // isn't parsed yet. Drives the interactive per-player net worth graph.
+    public string? GoldTJson { get; set; }
+
     // Captain-pick draft order: 0 = captain, 1 = first pick, 2 = second pick, ...
     // Null while drafting is still in progress for this slot.
     public int? PickOrder { get; set; }

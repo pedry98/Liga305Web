@@ -78,7 +78,8 @@ public record MatchPlayerDto(
     int? HeroHealing,
     IReadOnlyList<int?> Items,      // length 6 (inventory slots)
     IReadOnlyList<int?> Backpack,   // length 3
-    int? ItemNeutral);
+    int? ItemNeutral,
+    IReadOnlyList<int>? GoldT);     // per-minute net worth — null if match not parsed
 
 public record MatchDetailDto(
     Guid Id,

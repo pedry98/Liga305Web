@@ -259,62 +259,6 @@
     }
 
     @if (m.status === 'Completed') {
-      @if (goldChart(); as g) {
-        <section class="chart-card">
-          <header class="chart-head">
-            <h2>Gold advantage</h2>
-            <div class="chart-peaks">
-              @if (g.peakRadiant) {
-                <span class="peak-radiant" title="Radiant's biggest lead">
-                  <span class="peak-label">Radiant peak</span>
-                  <span class="peak-value">+{{ fmtNetWorth(g.peakRadiant.value) }}</span>
-                  <span class="peak-at">&#64; {{ g.peakRadiant.atMinute }}'</span>
-                </span>
-              }
-              @if (g.peakDire) {
-                <span class="peak-dire" title="Dire's biggest lead">
-                  <span class="peak-label">Dire peak</span>
-                  <span class="peak-value">+{{ fmtNetWorth(g.peakDire.value) }}</span>
-                  <span class="peak-at">&#64; {{ g.peakDire.atMinute }}'</span>
-                </span>
-              }
-            </div>
-          </header>
-          <div class="chart-wrap" role="img"
-               aria-label="Net gold advantage over time. Positive values mean Radiant leads.">
-            <svg viewBox="0 0 1 1" preserveAspectRatio="none" class="chart-svg">
-              <defs>
-                <linearGradient id="radiantFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="rgba(123, 198, 127, 0.55)" />
-                  <stop offset="100%" stop-color="rgba(123, 198, 127, 0.05)" />
-                </linearGradient>
-                <linearGradient id="direFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="rgba(217, 128, 126, 0.05)" />
-                  <stop offset="100%" stop-color="rgba(217, 128, 126, 0.55)" />
-                </linearGradient>
-                <clipPath id="clipTop" clipPathUnits="userSpaceOnUse">
-                  <rect x="0" y="0" width="1" height="0.5" />
-                </clipPath>
-                <clipPath id="clipBot" clipPathUnits="userSpaceOnUse">
-                  <rect x="0" y="0.5" width="1" height="0.5" />
-                </clipPath>
-              </defs>
-              <path [attr.d]="g.areaPath" fill="url(#radiantFill)" clip-path="url(#clipTop)" />
-              <path [attr.d]="g.areaPath" fill="url(#direFill)" clip-path="url(#clipBot)" />
-              <line x1="0" y1="0.5" x2="1" y2="0.5" class="chart-zero-line" vector-effect="non-scaling-stroke" />
-              <path [attr.d]="g.linePath" fill="none" class="chart-line" vector-effect="non-scaling-stroke" />
-            </svg>
-            <div class="chart-xaxis">
-              <span>0'</span>
-              <span>{{ g.midMin }}'</span>
-              <span>{{ g.durationMin }}'</span>
-            </div>
-          </div>
-        </section>
-      } @else if (!m.radiantGoldAdv) {
-        <p class="muted small center chart-missing">Gold/XP advantage graphs appear once OpenDota has parsed the replay (usually within a few minutes).</p>
-      }
-
       <section class="scoreboard-card radiant-side" [class.winner]="m.radiantWin">
         <header class="sb-head">
           <h2>Radiant</h2>
@@ -380,6 +324,156 @@
           </table>
         </div>
       </section>
+
+      @if (playerNetWorthChart(); as nw) {
+        <section class="nw-chart-card">
+          <header class="nw-head">
+            <h2>Player net worth</h2>
+            <span class="muted small">Hover the graph to see every player's net worth at that minute.</span>
+          </header>
+
+          <div class="nw-layout">
+            <ul class="nw-legend">
+              @for (l of nw.lines; track l.userId) {
+                <li class="nw-legend-row">
+                  <span class="nw-color-dot" [style.background]="l.color"></span>
+                  @if (hero({ heroId: l.heroId } ); as h) {
+                    <img [src]="h.iconUrl" [alt]="h.localizedName" [title]="h.localizedName" class="nw-legend-hero" />
+                  } @else {
+                    <span class="nw-legend-hero nw-legend-hero-fallback">—</span>
+                  }
+                  <span class="nw-legend-name" [title]="l.displayName">{{ l.displayName }}</span>
+                  <span class="nw-legend-final">{{ fmtNetWorth(l.finalNetWorth) }}</span>
+                </li>
+              }
+            </ul>
+
+            <div class="nw-chart-wrap"
+                 (mousemove)="onNwChartMove($event)"
+                 (mouseleave)="onNwChartLeave()">
+              <svg [attr.viewBox]="'0 0 ' + nw.width + ' ' + nw.height"
+                   preserveAspectRatio="none"
+                   class="nw-svg">
+                <!-- Horizontal gridlines + labels -->
+                @for (g of nw.gridY; track g.value) {
+                  <line [attr.x1]="nw.padLeft" [attr.x2]="nw.width - nw.padRight"
+                        [attr.y1]="g.y" [attr.y2]="g.y"
+                        class="nw-grid" vector-effect="non-scaling-stroke" />
+                  <text [attr.x]="nw.width - nw.padRight - 2" [attr.y]="g.y - 3"
+                        class="nw-grid-label" text-anchor="end">{{ fmtNetWorth(g.value) }}</text>
+                }
+
+                <!-- X-axis ticks -->
+                @for (g of nw.gridX; track g.minute) {
+                  <line [attr.x1]="g.x" [attr.x2]="g.x"
+                        [attr.y1]="nw.height - nw.padBottom" [attr.y2]="nw.height - nw.padBottom + 4"
+                        class="nw-tick" vector-effect="non-scaling-stroke" />
+                  <text [attr.x]="g.x" [attr.y]="nw.height - 6"
+                        class="nw-axis-label" text-anchor="middle">{{ g.minute }}'</text>
+                }
+
+                <!-- Player lines -->
+                @for (l of nw.lines; track l.userId) {
+                  <path [attr.d]="l.pathD"
+                        [attr.stroke]="l.color"
+                        fill="none"
+                        class="nw-line"
+                        vector-effect="non-scaling-stroke" />
+                }
+
+                <!-- Crosshair -->
+                @let hm = hoverMinute();
+                @if (hm !== null) {
+                  <line [attr.x1]="nw.xOfMinute(hm)"
+                        [attr.x2]="nw.xOfMinute(hm)"
+                        [attr.y1]="nw.padTop"
+                        [attr.y2]="nw.height - nw.padBottom"
+                        class="nw-crosshair" vector-effect="non-scaling-stroke" />
+                }
+              </svg>
+
+              @if (hoverBoard(); as hb) {
+                <div class="nw-tooltip"
+                     [class.nw-tooltip-right]="hoverX() > 480"
+                     [style.left.px]="hoverX()">
+                  <div class="nw-tt-head">
+                    <span class="nw-tt-minute">{{ hb.minute }}:00</span>
+                    <span class="muted small">Player net worth</span>
+                  </div>
+                  <ol class="nw-tt-list">
+                    @for (r of hb.rows; track r.userId) {
+                      <li class="nw-tt-row">
+                        <span class="nw-color-dot" [style.background]="r.color"></span>
+                        @if (hero({ heroId: r.heroId }); as h) {
+                          <img [src]="h.iconUrl" [alt]="h.localizedName" class="nw-tt-hero" />
+                        }
+                        <span class="nw-tt-name" [title]="r.displayName">{{ r.displayName }}</span>
+                        <span class="nw-tt-value">{{ fmtNetWorth(r.networthAt) }}</span>
+                      </li>
+                    }
+                  </ol>
+                </div>
+              }
+            </div>
+          </div>
+        </section>
+      }
+
+      @if (goldChart(); as g) {
+        <section class="chart-card">
+          <header class="chart-head">
+            <h2>Gold advantage</h2>
+            <div class="chart-peaks">
+              @if (g.peakRadiant) {
+                <span class="peak-radiant" title="Radiant's biggest lead">
+                  <span class="peak-label">Radiant peak</span>
+                  <span class="peak-value">+{{ fmtNetWorth(g.peakRadiant.value) }}</span>
+                  <span class="peak-at">&#64; {{ g.peakRadiant.atMinute }}'</span>
+                </span>
+              }
+              @if (g.peakDire) {
+                <span class="peak-dire" title="Dire's biggest lead">
+                  <span class="peak-label">Dire peak</span>
+                  <span class="peak-value">+{{ fmtNetWorth(g.peakDire.value) }}</span>
+                  <span class="peak-at">&#64; {{ g.peakDire.atMinute }}'</span>
+                </span>
+              }
+            </div>
+          </header>
+          <div class="chart-wrap" role="img"
+               aria-label="Net gold advantage over time. Positive values mean Radiant leads.">
+            <svg viewBox="0 0 1 1" preserveAspectRatio="none" class="chart-svg">
+              <defs>
+                <linearGradient id="radiantFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(123, 198, 127, 0.55)" />
+                  <stop offset="100%" stop-color="rgba(123, 198, 127, 0.05)" />
+                </linearGradient>
+                <linearGradient id="direFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(217, 128, 126, 0.05)" />
+                  <stop offset="100%" stop-color="rgba(217, 128, 126, 0.55)" />
+                </linearGradient>
+                <clipPath id="clipTop" clipPathUnits="userSpaceOnUse">
+                  <rect x="0" y="0" width="1" height="0.5" />
+                </clipPath>
+                <clipPath id="clipBot" clipPathUnits="userSpaceOnUse">
+                  <rect x="0" y="0.5" width="1" height="0.5" />
+                </clipPath>
+              </defs>
+              <path [attr.d]="g.areaPath" fill="url(#radiantFill)" clip-path="url(#clipTop)" />
+              <path [attr.d]="g.areaPath" fill="url(#direFill)" clip-path="url(#clipBot)" />
+              <line x1="0" y1="0.5" x2="1" y2="0.5" class="chart-zero-line" vector-effect="non-scaling-stroke" />
+              <path [attr.d]="g.linePath" fill="none" class="chart-line" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div class="chart-xaxis">
+              <span>0'</span>
+              <span>{{ g.midMin }}'</span>
+              <span>{{ g.durationMin }}'</span>
+            </div>
+          </div>
+        </section>
+      } @else if (!m.radiantGoldAdv) {
+        <p class="muted small center chart-missing">Gold/XP advantage graphs appear once OpenDota has parsed the replay (usually within a few minutes).</p>
+      }
 
       <ng-template #playerRow let-p>
         <tr [class.abandoned]="p.abandoned">

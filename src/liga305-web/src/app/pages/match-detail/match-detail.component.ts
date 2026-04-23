@@ -95,7 +95,27 @@ export class MatchDetailComponent {
   readonly goldChart = computed(() => this.buildAdvantageChart(this.match()?.radiantGoldAdv ?? null));
   readonly xpChart = computed(() => this.buildAdvantageChart(this.match()?.radiantXpAdv ?? null));
 
-  hero(p: MatchPlayer): HeroInfo | null { return this.dotaConstants.hero(p.heroId); }
+  // ---- Interactive per-player net worth chart ----------------------------
+  // Fixed viewBox coords; CSS scales the SVG to 100% width. Keeps math simple.
+  readonly nwChartWidth = 1000;
+  readonly nwChartHeight = 340;
+  readonly nwPadLeft = 8;
+  readonly nwPadRight = 8;
+  readonly nwPadTop = 18;
+  readonly nwPadBottom = 26;
+
+  // Dota's official per-slot player colors (0..4 Radiant, 0..4 Dire).
+  private readonly radiantSlotColors = ['#3375FF', '#66FFBF', '#BF00BF', '#F3F00B', '#FF6B00'];
+  private readonly direSlotColors    = ['#FE86C2', '#A1B447', '#65D9F7', '#008321', '#A46900'];
+
+  readonly hoverMinute = signal<number | null>(null);
+  readonly hoverX = signal<number>(0); // px within the chart box, for tooltip placement
+
+  readonly playerNetWorthChart = computed(() => this.buildPlayerNetWorthChart());
+
+  hero(p: { heroId: number | null } | null | undefined): HeroInfo | null {
+    return p ? this.dotaConstants.hero(p.heroId) : null;
+  }
   item(id: number | null | undefined): ItemInfo | null { return this.dotaConstants.item(id ?? null); }
 
   fmtInt(n: number | null | undefined): string {
@@ -163,6 +183,126 @@ export class MatchDetailComponent {
       peakDire: maxNeg < 0 ? { value: -maxNeg, atMinute: maxNegIdx } : null
     };
   }
+
+  // ---- Interactive per-player net worth chart ---------------------------
+
+  /**
+   * Build an interactive 10-line net-worth chart. Each player gets a Dota-slot
+   * color. Returns pixel-space SVG paths (viewBox is fixed to nwChartWidth ×
+   * nwChartHeight) plus a snapshot of every player's NW at each minute — so the
+   * tooltip just does an array lookup during mouse move.
+   */
+  private buildPlayerNetWorthChart() {
+    const m = this.match();
+    if (!m) return null;
+    const withSeries = m.players.filter(p => p.goldT && p.goldT.length >= 2);
+    if (withSeries.length === 0) return null;
+
+    const durationMin = Math.max(...withSeries.map(p => (p.goldT?.length ?? 1) - 1));
+    const maxGold = Math.max(...withSeries.flatMap(p => p.goldT!));
+    if (!Number.isFinite(maxGold) || maxGold <= 0) return null;
+
+    const innerW = this.nwChartWidth - this.nwPadLeft - this.nwPadRight;
+    const innerH = this.nwChartHeight - this.nwPadTop - this.nwPadBottom;
+
+    const x = (i: number) => this.nwPadLeft + (durationMin === 0 ? 0 : (i / durationMin) * innerW);
+    const y = (v: number) => this.nwPadTop + innerH - (v / maxGold) * innerH;
+
+    // Build per-team slot index (0..4) from the order players are returned.
+    const radiantOrder = m.players.filter(p => p.team === 'Radiant');
+    const direOrder    = m.players.filter(p => p.team === 'Dire');
+
+    const lines = m.players.map(p => {
+      const goldT = p.goldT;
+      const team = p.team;
+      const slot = team === 'Radiant'
+        ? radiantOrder.indexOf(p)
+        : direOrder.indexOf(p);
+      const color = team === 'Radiant'
+        ? (this.radiantSlotColors[slot] ?? '#66c0f4')
+        : (this.direSlotColors[slot] ?? '#d9807e');
+
+      let pathD = '';
+      if (goldT && goldT.length > 0) {
+        for (let i = 0; i < goldT.length; i++) {
+          pathD += `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(goldT[i]).toFixed(1)} `;
+        }
+      }
+      return {
+        userId: p.userId,
+        displayName: p.displayName,
+        team,
+        color,
+        slot,
+        heroId: p.heroId,
+        avatarUrl: p.avatarUrl,
+        goldT: goldT ?? [],
+        pathD,
+        finalNetWorth: goldT && goldT.length > 0 ? goldT[goldT.length - 1] : null
+      };
+    });
+
+    // Y-axis gridlines at nice round 5k steps.
+    const step = maxGold >= 30000 ? 10000 : maxGold >= 15000 ? 5000 : 2000;
+    const gridY: { value: number; y: number }[] = [];
+    for (let v = step; v < maxGold; v += step) gridY.push({ value: v, y: y(v) });
+
+    // X-axis ticks every 5 minutes.
+    const gridX: { minute: number; x: number }[] = [];
+    for (let min = 0; min <= durationMin; min += 5) gridX.push({ minute: min, x: x(min) });
+
+    return {
+      width: this.nwChartWidth,
+      height: this.nwChartHeight,
+      padLeft: this.nwPadLeft,
+      padRight: this.nwPadRight,
+      padTop: this.nwPadTop,
+      padBottom: this.nwPadBottom,
+      innerW,
+      innerH,
+      durationMin,
+      maxGold,
+      lines,
+      gridX,
+      gridY,
+      xOfMinute: (i: number) => x(i)
+    };
+  }
+
+  onNwChartMove(evt: MouseEvent) {
+    const chart = this.playerNetWorthChart();
+    if (!chart) return;
+    const target = evt.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const relX = evt.clientX - rect.left;
+    // Map back from rendered px to minute using the chart's inner x-range.
+    const scale = rect.width / chart.width;
+    const innerLeftPx = chart.padLeft * scale;
+    const innerWPx = chart.innerW * scale;
+    const clamped = Math.max(0, Math.min(innerWPx, relX - innerLeftPx));
+    const minute = chart.durationMin === 0 ? 0 : Math.round((clamped / innerWPx) * chart.durationMin);
+    this.hoverMinute.set(Math.max(0, Math.min(chart.durationMin, minute)));
+    this.hoverX.set(relX);
+  }
+
+  onNwChartLeave() {
+    this.hoverMinute.set(null);
+  }
+
+  /**
+   * Players sorted by net worth at the hovered minute (descending). Drives the
+   * floating tooltip, mimicking Dota's post-game graph where the leader is at
+   * the top and the trailing player at the bottom.
+   */
+  readonly hoverBoard = computed(() => {
+    const chart = this.playerNetWorthChart();
+    const min = this.hoverMinute();
+    if (!chart || min === null) return null;
+    const rows = chart.lines
+      .map(l => ({ ...l, networthAt: l.goldT[min] ?? l.goldT[l.goldT.length - 1] ?? 0 }))
+      .sort((a, b) => b.networthAt - a.networthAt);
+    return { minute: min, rows };
+  });
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';

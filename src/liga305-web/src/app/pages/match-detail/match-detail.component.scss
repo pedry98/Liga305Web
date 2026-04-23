@@ -939,3 +939,216 @@
     &.down { color: #d9807e; }
   }
 }
+
+// ============================================================================
+// Interactive per-player net-worth chart
+// ============================================================================
+
+.nw-chart-card {
+  background: #1b2838;
+  border: 1px solid #2d3a4a;
+  border-radius: 0.5rem;
+  padding: 1rem 1.1rem 1.2rem;
+  margin-top: 1.5rem;
+
+  .nw-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.8rem;
+
+    h2 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+  }
+}
+
+.nw-layout {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 0.8rem;
+  align-items: stretch;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nw-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.nw-legend-row {
+  display: grid;
+  grid-template-columns: 10px 34px 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.82rem;
+
+  &:hover { background: rgba(102, 192, 244, 0.05); }
+}
+
+.nw-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.nw-legend-hero {
+  width: 34px;
+  height: 19px;
+  border-radius: 2px;
+  object-fit: cover;
+  display: block;
+}
+.nw-legend-hero-fallback {
+  background: #0e1a26;
+  color: #8a98a5;
+  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nw-legend-name {
+  color: #e6e9ec;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nw-legend-final {
+  color: #f1c40f;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.nw-chart-wrap {
+  position: relative;
+  background: #0e1a26;
+  border-radius: 0.4rem;
+  border: 1px solid #2d3a4a;
+  padding: 0.3rem 0.4rem 0.2rem;
+}
+
+.nw-svg {
+  display: block;
+  width: 100%;
+  height: 340px;
+  overflow: visible;
+}
+
+.nw-grid {
+  stroke: rgba(138, 152, 165, 0.12);
+  stroke-width: 1;
+}
+.nw-grid-label {
+  fill: #5c6b7a;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  dominant-baseline: text-after-edge;
+}
+.nw-tick {
+  stroke: rgba(138, 152, 165, 0.35);
+  stroke-width: 1;
+}
+.nw-axis-label {
+  fill: #8a98a5;
+  font-size: 10px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.nw-line {
+  stroke-width: 1.6;
+  opacity: 0.9;
+  fill: none;
+}
+.nw-crosshair {
+  stroke: rgba(230, 233, 236, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+// Floating tooltip — absolutely positioned, follows cursor X.
+.nw-tooltip {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  transform: translateX(16px);
+  background: rgba(14, 26, 38, 0.96);
+  border: 1px solid #2d3a4a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  min-width: 220px;
+  pointer-events: none;
+  z-index: 10;
+
+  // Flip to the left of the crosshair when near right edge.
+  &.nw-tooltip-right { transform: translateX(calc(-100% - 16px)); }
+
+  .nw-tt-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid #2d3a4a;
+  }
+
+  .nw-tt-minute {
+    font-weight: 700;
+    color: #e6e9ec;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nw-tt-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nw-tt-row {
+    display: grid;
+    grid-template-columns: 10px 28px 1fr auto;
+    gap: 0.35rem;
+    align-items: center;
+    font-size: 0.8rem;
+    padding: 1px 0;
+  }
+
+  .nw-tt-hero {
+    width: 28px;
+    height: 16px;
+    border-radius: 2px;
+    object-fit: cover;
+  }
+
+  .nw-tt-name {
+    color: #c7d5e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+
+  .nw-tt-value {
+    color: #f1c40f;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}

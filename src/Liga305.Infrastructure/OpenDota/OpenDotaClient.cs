@@ -40,7 +40,8 @@ public record OpenDotaPlayer(
     int? Backpack0,
     int? Backpack1,
     int? Backpack2,
-    int? ItemNeutral);
+    int? ItemNeutral,
+    IReadOnlyList<int>? GoldT);
 
 public class OpenDotaClient(HttpClient http, ILogger<OpenDotaClient> logger)
 {
@@ -102,7 +103,8 @@ public class OpenDotaClient(HttpClient http, ILogger<OpenDotaClient> logger)
                     Backpack0: p.Backpack0,
                     Backpack1: p.Backpack1,
                     Backpack2: p.Backpack2,
-                    ItemNeutral: p.ItemNeutral)).ToList());
+                    ItemNeutral: p.ItemNeutral,
+                    GoldT: p.GoldT)).ToList());
         }
         catch (Exception ex)
         {
@@ -148,5 +150,6 @@ public class OpenDotaClient(HttpClient http, ILogger<OpenDotaClient> logger)
         [property: JsonPropertyName("backpack_0")] int? Backpack0,
         [property: JsonPropertyName("backpack_1")] int? Backpack1,
         [property: JsonPropertyName("backpack_2")] int? Backpack2,
-        [property: JsonPropertyName("item_neutral")] int? ItemNeutral);
+        [property: JsonPropertyName("item_neutral")] int? ItemNeutral,
+        [property: JsonPropertyName("gold_t")] List<int>? GoldT);
 }

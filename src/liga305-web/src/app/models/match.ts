@@ -32,6 +32,7 @@ export interface MatchPlayer {
   items: (number | null)[];     // length 6
   backpack: (number | null)[];  // length 3
   itemNeutral: number | null;
+  goldT: number[] | null;       // per-minute net worth; null if match isn't parsed
 }
 
 export interface MatchSummary {

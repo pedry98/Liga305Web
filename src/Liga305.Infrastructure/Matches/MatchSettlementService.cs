@@ -91,6 +91,7 @@ public class MatchSettlementService(Liga305DbContext db, ILogger<MatchSettlement
                 player.Backpack1   = oPlayer.Backpack1;
                 player.Backpack2   = oPlayer.Backpack2;
                 player.ItemNeutral = oPlayer.ItemNeutral;
+                player.GoldTJson   = oPlayer.GoldT is { Count: > 0 } gt ? JsonSerializer.Serialize(gt) : null;
             }
 
             if (player.Abandoned)

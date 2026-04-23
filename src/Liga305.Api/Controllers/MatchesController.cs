@@ -232,7 +232,8 @@ public class MatchesController(
                     p.NetWorth, p.HeroDamage, p.TowerDamage, p.HeroHealing,
                     new int?[] { p.Item0, p.Item1, p.Item2, p.Item3, p.Item4, p.Item5 },
                     new int?[] { p.Backpack0, p.Backpack1, p.Backpack2 },
-                    p.ItemNeutral))
+                    p.ItemNeutral,
+                    ParseIntArray(p.GoldTJson)))
                 .ToList()));
     }
 
